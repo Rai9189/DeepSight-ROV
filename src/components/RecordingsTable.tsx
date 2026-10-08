@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { toast } from 'sonner'
+import { Download, Play, Search, Trash2 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface Recording {
   id: string
@@ -15,17 +16,16 @@ interface Recording {
   duration: number | null
   createdAt: string
   updatedAt: string
-  // field tambahan dari dialog simpan recording
-  missionName?: string
-  location?: string
+  missionName?: string | null
 }
 
 interface RecordingsTableProps {
   recordings: Recording[]
+  isAdmin: boolean
 }
 
 function formatDuration(seconds: number | null): string {
-  if (seconds == null) return '--'
+  if (seconds == null) return '—'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = Math.floor(seconds % 60)
@@ -33,262 +33,220 @@ function formatDuration(seconds: number | null): string {
 }
 
 function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '--'
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+  if (!Number.isFinite(bytes) || bytes < 0) return '—'
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
 }
 
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return '—'
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+const fmtDate = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+const fmtClock = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+
+// createdAt is written when the recording STOPS, so the start is createdAt − duration
+function recordingTimes(rec: Recording) {
+  const end = new Date(rec.createdAt)
+  if (isNaN(end.getTime())) return null
+  const start = rec.duration ? new Date(end.getTime() - rec.duration * 1000) : end
+  return { start, end }
 }
 
-function formatTimeRange(dateStr: string, duration: number | null): string {
-  const start = new Date(dateStr)
-  const startStr = start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-  if (!duration) return startStr
-  const end = new Date(start.getTime() + duration * 1000)
-  const endStr = end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-  return `${startStr}-${endStr}`
-}
+const missionLabel = (rec: Recording) => rec.missionName || rec.fileName
 
-const FORMAT_ALL = 'Semua'
-const SORT_NEWEST = 'Terbaru'
-const SORT_OLDEST = 'Terlama'
+const iconBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100'
 
-const FORMAT_COLORS: Record<string, string> = {
-  mp4: 'bg-blue-100 text-blue-700',
-  webm: 'bg-purple-100 text-purple-700',
-  avi: 'bg-orange-100 text-orange-700',
-}
-
-export default function RecordingsTable({ recordings: initialRecordings }: RecordingsTableProps) {
+export default function RecordingsTable({ recordings: initialRecordings, isAdmin }: RecordingsTableProps) {
   const [recordings, setRecordings] = useState(initialRecordings)
+  useEffect(() => { setRecordings(initialRecordings) }, [initialRecordings])
 
-  useEffect(() => {
-    setRecordings(initialRecordings)
-  }, [initialRecordings])
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<Recording | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [playingVideo, setPlayingVideo] = useState<Recording | null>(null)
+  const [videoMissing, setVideoMissing] = useState(false)
   const [search, setSearch] = useState('')
-  const [formatFilter, setFormatFilter] = useState(FORMAT_ALL)
-  const [sortOrder, setSortOrder] = useState(SORT_NEWEST)
+  const [newestFirst, setNewestFirst] = useState(true)
 
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
   const filtered = useMemo(() => {
-    let list = [...recordings]
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      list = list.filter(r =>
-        (r.missionName ?? r.fileName).toLowerCase().includes(q) ||
-        r.sessionId.toLowerCase().includes(q)
-      )
-    }
-    if (formatFilter !== FORMAT_ALL) {
-      list = list.filter(r => r.format.toLowerCase() === formatFilter.toLowerCase())
-    }
-    if (sortOrder === SORT_NEWEST) {
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    } else {
-      list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    }
+    const q = search.trim().toLowerCase()
+    const list = q ? recordings.filter(r => missionLabel(r).toLowerCase().includes(q)) : [...recordings]
+    list.sort((a, b) => (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) * (newestFirst ? 1 : -1))
     return list
-  }, [recordings, search, formatFilter, sortOrder])
+  }, [recordings, search, newestFirst])
 
-  const handleDelete = async (id: string, fileName: string) => {
-    if (!confirm(`Hapus recording "${fileName}"?`)) return
-    setDeletingId(id)
+  const confirmDelete = async () => {
+    if (!deleting) return
+    setIsDeleting(true)
     try {
-      await apiClient.delete(`/api/recordings/${id}`)
-      setRecordings(prev => prev.filter(r => r.id !== id))
-    } catch {
-      toast.error('Gagal menghapus recording')
+      await apiClient.delete(`/api/recordings/${deleting.id}`)
+      setRecordings(prev => prev.filter(r => r.id !== deleting.id))
+      toast.success('Recording deleted')
+      setDeleting(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't delete the recording")
     } finally {
-      setDeletingId(null)
+      setIsDeleting(false)
     }
   }
 
+  const openPlayer = (rec: Recording) => { setVideoMissing(false); setPlayingVideo(rec) }
   const handleDownload = (fileName: string) => {
     window.open(`${backendUrl}/api/recordings/download/${fileName}`, '_blank')
   }
 
+  const playingTimes = playingVideo ? recordingTimes(playingVideo) : null
+
   return (
     <div className="space-y-4">
 
-      {/* ── Filter Bar ── */}
+      {/* ── Toolbar ── */}
       <div className="flex flex-wrap items-center gap-3">
-        {/* Search */}
-        <div className="relative flex-1 min-w-48">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+        <div className="relative min-w-48 flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
-            type="text"
+            type="search"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Cari nama mission atau session..."
-            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white"
+            placeholder="Search missions…"
+            aria-label="Search recordings by mission"
+            className="h-9 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
         </div>
-
-        {/* Format filter */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Format:</span>
+        <label className="flex items-center gap-2 text-sm text-gray-500">
+          Sort
           <select
-            value={formatFilter}
-            onChange={e => setFormatFilter(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-400 cursor-pointer"
+            value={newestFirst ? 'newest' : 'oldest'}
+            onChange={e => setNewestFirst(e.target.value === 'newest')}
+            className="h-9 rounded-lg border border-gray-300 bg-white px-2.5 text-sm text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
-            <option value={FORMAT_ALL}>{FORMAT_ALL}</option>
-            <option value="MP4">MP4</option>
-            <option value="WEBM">WEBM</option>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
           </select>
-        </div>
-
-        {/* Sort */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Urutkan:</span>
-          <select
-            value={sortOrder}
-            onChange={e => setSortOrder(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-400 cursor-pointer"
-          >
-            <option value={SORT_NEWEST}>{SORT_NEWEST}</option>
-            <option value={SORT_OLDEST}>{SORT_OLDEST}</option>
-          </select>
-        </div>
-
-        {/* Count */}
-        <span className="ml-auto text-sm text-gray-400">
-          {filtered.length} rekaman ditemukan
+        </label>
+        <span className="ml-auto text-sm text-gray-500">
+          {filtered.length} {filtered.length === 1 ? 'recording' : 'recordings'}
         </span>
       </div>
 
-      {/* ── Table ── */}
+      {/* ── Gallery ── */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-gray-300">
-          <div className="w-16 h-16 rounded-full border-4 border-dashed border-gray-200 flex items-center justify-center mb-3">
-            <span className="text-2xl">📹</span>
-          </div>
-          <p className="text-sm text-gray-400">Belum ada rekaman ditemukan</p>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 px-6 py-20 text-center">
+          <p className="text-base font-semibold text-gray-700">
+            {search ? 'No recordings match your search' : 'No recordings yet'}
+          </p>
+          <p className="mt-1 text-sm text-gray-500">
+            {search ? 'Try a different mission name.' : 'Recordings are saved automatically while you stream a mission.'}
+          </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                {['FORMAT', 'NAMA MISI', 'TANGGAL', 'WAKTU MISI', 'DURASI', 'UKURAN', 'SESSION ID', 'ACTIONS'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map(rec => (
-                <tr key={rec.id} className="bg-white hover:bg-gray-50 transition-colors">
-                  {/* Format badge */}
-                  <td className="px-4 py-4">
-                    <span className={`text-xs font-bold px-2 py-1 rounded-lg uppercase ${FORMAT_COLORS[rec.format.toLowerCase()] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {rec.format.toUpperCase()}
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {filtered.map(rec => {
+            const t = recordingTimes(rec)
+            const name = missionLabel(rec)
+            return (
+              <li key={rec.id} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-md">
+                <button
+                  onClick={() => openPlayer(rec)}
+                  aria-label={`Play ${name}`}
+                  className="relative block aspect-video w-full bg-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400"
+                >
+                  {/* First frame as thumbnail. ponytail: one metadata request per card; switch to server-made thumbnails if the list gets long */}
+                  <video
+                    src={`${backendUrl}/api/recordings/stream/${rec.fileName}#t=0.5`}
+                    preload="metadata"
+                    muted
+                    playsInline
+                    tabIndex={-1}
+                    className="pointer-events-none h-full w-full object-cover"
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/10 transition-colors group-hover:bg-black/30">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-gray-900 shadow transition-transform group-hover:scale-105">
+                      <Play className="ml-0.5 h-5 w-5 fill-current" />
                     </span>
-                  </td>
-
-                  {/* Nama misi / file name */}
-                  <td className="px-4 py-4 font-medium text-gray-800 whitespace-nowrap">
-                    {rec.missionName ?? rec.fileName}
-                  </td>
-
-                  {/* Tanggal */}
-                  <td className="px-4 py-4 text-gray-500 whitespace-nowrap">
-                    {formatDate(rec.createdAt)}
-                  </td>
-
-                  {/* Waktu misi (start-end) */}
-                  <td className="px-4 py-4 text-gray-500 whitespace-nowrap font-mono text-xs">
-                    {formatTimeRange(rec.createdAt, rec.duration)}
-                  </td>
-
-                  {/* Durasi */}
-                  <td className="px-4 py-4 text-gray-500 whitespace-nowrap font-mono text-xs">
+                  </span>
+                  <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
                     {formatDuration(rec.duration)}
-                  </td>
+                  </span>
+                </button>
 
-                  {/* Ukuran */}
-                  <td className="px-4 py-4 text-gray-500 whitespace-nowrap">
-                    {formatFileSize(rec.fileSize)}
-                  </td>
-
-                  {/* Session ID */}
-                  <td className="px-4 py-4">
-                    <span className="text-xs font-mono text-gray-400 border border-gray-200 px-2 py-1 rounded-lg bg-gray-50">
-                      session_{rec.sessionId.slice(-3)}
-                    </span>
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setPlayingVideo(rec)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors"
-                      >
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                        Play
+                <div className="p-4">
+                  <p className="truncate font-medium text-gray-900" title={name}>{name}</p>
+                  <p className="mt-0.5 text-sm text-gray-500">
+                    {t ? `${fmtDate(t.start)} · ${fmtClock(t.start)}–${fmtClock(t.end)}` : '—'}
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-xs text-gray-500">{formatFileSize(rec.fileSize)}</span>
+                    <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700">{rec.format.toUpperCase()}</span>
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <button onClick={() => handleDownload(rec.fileName)} aria-label={`Download ${name}`} title="Download" className={`${iconBtn} border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900`}>
+                        <Download className="h-4 w-4" />
                       </button>
-                      <button
-                        onClick={() => handleDownload(rec.fileName)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 text-gray-600 text-xs font-medium rounded-lg transition-colors"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        Download
-                      </button>
-                      <button
-                        onClick={() => handleDelete(rec.id, rec.fileName)}
-                        disabled={deletingId === rec.id}
-                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white text-xs font-medium rounded-lg transition-colors"
-                      >
-                        {deletingId === rec.id ? 'Menghapus...' : 'Delete'}
-                      </button>
+                      {isAdmin && (
+                        <button onClick={() => setDeleting(rec)} aria-label={`Delete ${name}`} title="Delete" className={`${iconBtn} border-red-200 text-red-600 hover:bg-red-50`}>
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       )}
 
-      {/* ── Video Player Dialog ── */}
+      {/* ── Video player ── */}
       <Dialog open={!!playingVideo} onOpenChange={open => { if (!open) setPlayingVideo(null) }}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle className="text-sm font-semibold text-gray-700">
-              {playingVideo?.missionName ?? playingVideo?.fileName}
-            </DialogTitle>
+            <DialogTitle className="text-base font-semibold">{playingVideo && missionLabel(playingVideo)}</DialogTitle>
+            <DialogDescription>
+              {playingTimes && `${fmtDate(playingTimes.start)} · ${fmtClock(playingTimes.start)}–${fmtClock(playingTimes.end)} · `}
+              {playingVideo && formatDuration(playingVideo.duration)}
+            </DialogDescription>
           </DialogHeader>
-          <div className="mt-2">
-            {playingVideo && (
-              <video
-                controls
-                autoPlay
-                className="w-full rounded-xl bg-black"
-                src={`${backendUrl}/api/recordings/stream/${playingVideo.fileName}`}
-              >
-                Browser tidak mendukung video tag.
-              </video>
-            )}
-          </div>
+          {playingVideo && (videoMissing ? (
+            <div className="flex aspect-video flex-col items-center justify-center rounded-lg bg-gray-100 px-6 text-center">
+              <p className="text-sm font-medium text-gray-700">This recording file is no longer on the server</p>
+              <p className="mt-1 text-xs text-gray-500">The entry is still listed, but the video file was moved or deleted.</p>
+            </div>
+          ) : (
+            <video
+              controls
+              autoPlay
+              onError={() => setVideoMissing(true)}
+              className="w-full rounded-lg bg-black"
+              src={`${backendUrl}/api/recordings/stream/${playingVideo.fileName}`}
+            />
+          ))}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete confirmation (admin only) ── */}
+      <Dialog open={!!deleting} onOpenChange={open => { if (!open && !isDeleting) setDeleting(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Delete recording?</DialogTitle>
+            <DialogDescription>
+              {deleting && <><span className="font-medium text-gray-900">{missionLabel(deleting)}</span> will be removed and its video file permanently deleted from the server. This can&apos;t be undone.</>}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              onClick={() => setDeleting(null)}
+              disabled={isDeleting}
+              className="h-9 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className="h-9 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-70"
+            >
+              {isDeleting ? 'Deleting…' : 'Delete recording'}
+            </button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

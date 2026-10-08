@@ -19,7 +19,7 @@ async function getRecordings(token: string) {
 }
 
 export default async function RecordingsPage() {
-  await requireAuth()
+  const session = await requireAuth()
   const cookieStore = await cookies()
   const token = cookieStore.get('access_token')?.value || ''
   const recordings = await getRecordings(token)
@@ -27,10 +27,8 @@ export default async function RecordingsPage() {
   return (
     <>
       <Header title="Recordings" subtitle="Mission video recordings" />
-      <main className="px-6 py-4">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <RecordingsTable recordings={recordings} />
-        </div>
+      <main className="px-4 py-4 lg:px-6">
+        <RecordingsTable recordings={recordings} isAdmin={session.user.role === 'ADMIN'} />
       </main>
     </>
   )
