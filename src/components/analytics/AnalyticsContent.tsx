@@ -9,21 +9,9 @@ import {
 } from 'recharts'
 import { apiClient } from '@/lib/api-client'
 import { downloadXlsx } from '@/lib/xlsx-export'
+import { getSpeciesColor } from '@/lib/species'
 
 const fetcher = apiClient.swrFetcher
-
-const SPECIES_COLORS: Record<string, string> = {
-  Kerapu: '#3b82f6',
-  Bandeng: '#22c55e',
-  Teri: '#f97316',
-  Lainnya: '#9ca3af',
-  Unknown: '#9ca3af',
-}
-const DEFAULT_COLORS = ['#3b82f6', '#22c55e', '#f97316', '#9ca3af', '#a855f7', '#ec4899']
-
-function getColor(name: string, idx: number) {
-  return SPECIES_COLORS[name] || DEFAULT_COLORS[idx % DEFAULT_COLORS.length]
-}
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -264,7 +252,7 @@ export default function AnalyticsContent() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {speciesDist.slice(0, 4).map((s: any, i: number) => {
                 const pct = speciesTotal > 0 ? ((s.count / speciesTotal) * 100).toFixed(1) : '0'
-                const color = getColor(s.species, i)
+                const color = getSpeciesColor(s.species, i)
                 return (
                   <div key={s.species} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
                     <p className="text-3xl font-bold mb-1" style={{ color }}>{s.count}</p>
@@ -311,7 +299,7 @@ export default function AnalyticsContent() {
                       <PieChart>
                         <Pie data={speciesDist} dataKey="count" nameKey="species" cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={2}>
                           {speciesDist.map((s: any, i: number) => (
-                            <Cell key={s.species} fill={getColor(s.species, i)} />
+                            <Cell key={s.species} fill={getSpeciesColor(s.species, i)} />
                           ))}
                         </Pie>
                         <Tooltip />
@@ -326,7 +314,7 @@ export default function AnalyticsContent() {
                     {speciesDist.map((s: any, i: number) => (
                       <div key={s.species} className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getColor(s.species, i) }} />
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getSpeciesColor(s.species, i) }} />
                           <span className="text-gray-500">{s.species}</span>
                         </div>
                         <span className="text-gray-600 font-medium">{s.count}</span>
@@ -440,7 +428,7 @@ export default function AnalyticsContent() {
                 <tbody className="divide-y divide-gray-50">
                   {detectionList.length > 0 ? detectionList.map((r: any, i: number) => {
                     const conf = r.confidence ?? 0
-                    const color = getColor(r.speciesName, i)
+                    const color = getSpeciesColor(r.speciesName, i)
                     return (
                       <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(r.detectedAt)}</td>

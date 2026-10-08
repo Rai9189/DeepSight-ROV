@@ -4,17 +4,11 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import Header from '@/components/layout/Header'
 import { apiClient } from '@/lib/api-client'
+import { getSpeciesColor, TARGET_SPECIES } from '@/lib/species'
 import useSWR from 'swr'
 
 const IFRAME_PREVIEW_URL = process.env.NEXT_PUBLIC_STREAM_PREVIEW_URL || 'http://192.168.2.2:8889/cam/'
 const API_WS_URL = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:8000'
-const SPECIES_COLORS: Record<string, string> = {
-  Kerapu: '#3b82f6',
-  Bandeng: '#22c55e',
-  Teri: '#f59e0b',
-  Pindang: '#f97316',
-  'Lainnya / Unknown': '#9ca3af',
-}
 
 type ConnStatus = 'disconnected' | 'connected' | 'error'
 type Profile = 'balanced' | 'ultra'
@@ -55,9 +49,6 @@ function formatDuration(seconds: number) {
   const m = Math.floor((seconds % 3600) / 60)
   const s = seconds % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-}
-function getSpeciesColor(name: string, idx: number) {
-  return SPECIES_COLORS[name] || Object.values(SPECIES_COLORS)[idx % Object.values(SPECIES_COLORS).length] || '#6366f1'
 }
 
 // ── Reusable select style ─────────────────────────────────────────────────────
@@ -767,7 +758,7 @@ export default function StreamComponent() {
                 <div className="mt-3 space-y-1.5">
                   {(speciesCounts.length > 0
                     ? speciesCounts
-                    : ['Kerapu', 'Bandeng', 'Teri', 'Lainnya / Unknown'].map(n => ({ speciesName: n, totalCount: 0 }))
+                    : TARGET_SPECIES.map(n => ({ speciesName: n, totalCount: 0 }))
                   ).map((s, i) => {
                     const name = 'speciesName' in s ? s.speciesName : String(s)
                     const count = 'totalCount' in s ? s.totalCount : 0

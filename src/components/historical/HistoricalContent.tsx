@@ -9,20 +9,9 @@ import {
 } from 'recharts'
 import { apiClient } from '@/lib/api-client'
 import { downloadXlsx } from '@/lib/xlsx-export'
+import { getSpeciesColor, TARGET_SPECIES } from '@/lib/species'
 
 const fetcher = apiClient.swrFetcher
-
-const SPECIES_COLORS: Record<string, string> = {
-  Kerapu: '#3b82f6',
-  Bandeng: '#22c55e',
-  Teri: '#f97316',
-  Lainnya: '#9ca3af',
-  Unknown: '#9ca3af',
-}
-const DEFAULT_COLORS = ['#3b82f6', '#22c55e', '#f97316', '#9ca3af', '#a855f7', '#ec4899']
-function getColor(name: string, idx: number) {
-  return SPECIES_COLORS[name] || DEFAULT_COLORS[idx % DEFAULT_COLORS.length]
-}
 
 type RangeKey = '7d' | '30d' | '90d' | 'all' | 'custom'
 const RANGE_OPTIONS: { label: string; key: RangeKey; hours: number }[] = [
@@ -250,7 +239,7 @@ export default function HistoricalContent() {
     stackedBarData.forEach(row => {
       Object.keys(row).forEach(k => { if (k !== 'date') fromData.add(k) })
     })
-    return fromData.size > 0 ? Array.from(fromData) : ['Kerapu', 'Bandeng', 'Teri', 'Lainnya']
+    return fromData.size > 0 ? Array.from(fromData) : TARGET_SPECIES
   }, [fishSummary, stackedBarData])
 
   return (
@@ -340,7 +329,7 @@ export default function HistoricalContent() {
               <Tooltip />
               <Legend iconType="circle" iconSize={10} />
               {speciesKeys.map((sp: string, i: number) => (
-                <Bar key={sp} dataKey={sp} stackId="a" fill={getColor(sp, i)} />
+                <Bar key={sp} dataKey={sp} stackId="a" fill={getSpeciesColor(sp, i)} />
               ))}
             </BarChart>
           </ResponsiveContainer>
