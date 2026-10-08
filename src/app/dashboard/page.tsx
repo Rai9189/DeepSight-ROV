@@ -9,10 +9,7 @@ export default async function DashboardPage() {
     <>
       <Header title="Dashboard" subtitle={`Welcome back, ${session.user.fullName}`} />
       <main className="p-0 lg:px-4 mt-4">
-        <DashboardContent
-          userFullName={session.user.fullName}
-          userRole={session.user.role}
-        />
+        <DashboardContent />
       </main>
     </>
   )

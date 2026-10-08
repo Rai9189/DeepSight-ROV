@@ -1,122 +1,98 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import useSWR from 'swr'
-import { useRouter } from 'next/navigation'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import Link from 'next/link'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { Anchor, ChevronRight } from 'lucide-react'
 import { apiClient, isApiStatus } from '@/lib/api-client'
-import {
-  Sailboat,
-  CalendarDays,
-  Timer,
-  MapPin,
-  Droplets,
-  Zap,
-  Wind,
-  Thermometer,
-  ChevronRight,
-  Gauge,
-  Navigation,
-  Activity,
-  Anchor,
-} from 'lucide-react'
+import { getSpeciesColor } from '@/lib/species'
+import { getPhStatus, getDoStatus, getTempStatus } from '@/lib/water-quality'
+import SensorCard from '@/components/dashboard/SensorCard'
 
 const fetcher = apiClient.swrFetcher
 
-function getPhStatus(ph: number) {
-  if (ph < 7.5) return { label: 'Rendah', color: 'text-red-500', bar: 'bg-red-500' }
-  if (ph > 8.4) return { label: 'Tinggi', color: 'text-yellow-500', bar: 'bg-yellow-500' }
-  return { label: 'Normal', color: 'text-green-500', bar: 'bg-green-500' }
+// Data older than this is shown as stale (ROV may be disconnected)
+const STALE_SECONDS = 30
+
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+
+function fmtDuration(ms: number) {
+  if (ms <= 0) return '—'
+  const h = Math.floor(ms / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  const s = Math.floor((ms % 60000) / 1000)
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m ${String(s).padStart(2, '0')}s`
 }
 
-function getTdsStatus(tds: number) {
-  if (tds < 200) return { label: 'Rendah', color: 'text-blue-500', bar: 'bg-blue-500' }
-  if (tds > 500) return { label: 'Tinggi', color: 'text-red-500', bar: 'bg-red-500' }
-  return { label: 'Normal', color: 'text-yellow-500', bar: 'bg-yellow-500' }
+function fmtAgo(seconds: number) {
+  if (seconds < 60) return `${Math.max(0, Math.floor(seconds))}s ago`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
+  return `${Math.floor(seconds / 3600)}h ago`
 }
 
-function getDoStatus(doVal: number) {
-  if (doVal < 5) return { label: 'Rendah', color: 'text-red-500', bar: 'bg-red-500' }
-  if (doVal > 8) return { label: 'Tinggi', color: 'text-blue-500', bar: 'bg-blue-500' }
-  return { label: 'Normal', color: 'text-green-500', bar: 'bg-green-500' }
-}
+const card = 'bg-white rounded-2xl border border-gray-100 shadow-sm'
 
-function getTempStatus(temp: number) {
-  if (temp < 20) return { label: 'Dingin', color: 'text-blue-500', bar: 'bg-blue-500' }
-  if (temp > 32) return { label: 'Panas', color: 'text-red-500', bar: 'bg-red-500' }
-  return { label: 'Normal', color: 'text-green-500', bar: 'bg-green-500' }
-}
-
-function progressPercent(value: number, max: number) {
-  return Math.min(100, Math.max(0, (value / max) * 100))
-}
-
-function InfoCard({
-  label, value, icon: Icon, iconBg,
-}: {
-  label: string; value: string; icon: React.ElementType; iconBg: string
-}) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 flex items-center justify-between">
-      <div>
-        <p className="text-xs text-gray-400 mb-1">{label}</p>
-        <p className="text-lg font-bold text-gray-800 leading-tight">{value}</p>
-      </div>
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${iconBg}`}>
-        <Icon className="w-5 h-5 text-white" />
-      </div>
+    <div>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-0.5 text-base font-semibold text-gray-900">{value}</p>
     </div>
   )
 }
 
-function WaterCard({
-  label, value, unit, status, barPercent, icon: Icon, iconColor,
-}: {
-  label: string; value: string; unit: string
-  status: { label: string; color: string; bar: string }
-  barPercent: number; icon: React.ElementType; iconColor: string
-}) {
+function EmptyState({ title, text }: { title: string; text: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs text-gray-400">{label}</p>
-        <Icon className={`w-4 h-4 ${iconColor}`} />
+    <div className="flex flex-col items-center justify-center h-80 text-center">
+      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+        <Anchor className="w-7 h-7 text-gray-400" />
       </div>
-      <div className="flex items-baseline gap-1 mb-1">
-        <span className="text-2xl font-bold text-gray-800">{value}</span>
-        <span className="text-xs text-gray-400">{unit}</span>
-      </div>
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className={`text-xs font-medium ${status.color} flex items-center gap-0.5`}>
-          <span className={`inline-block w-1.5 h-1.5 rounded-full ${status.bar}`} />
-          {status.label}
-        </span>
-      </div>
-      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-500 ${status.bar}`} style={{ width: `${barPercent}%` }} />
-      </div>
+      <h3 className="text-base font-semibold text-gray-700 mb-1">{title}</h3>
+      <p className="text-sm text-gray-500 max-w-xs">{text}</p>
     </div>
   )
 }
 
-const SPECIES_COLORS = ['#3b82f6', '#22c55e', '#f97316', '#9ca3af']
-
-interface DashboardContentProps {
-  userFullName: string
-  userRole: string
+// Hover marker on the dive profile: a small ROV (yellow float on top, blue frame, side thrusters, camera)
+function RovMarker({ cx, cy }: { cx?: number; cy?: number }) {
+  if (cx == null || cy == null) return <g />
+  return (
+    <g transform={`translate(${cx - 14}, ${cy - 10})`} pointerEvents="none">
+      <rect x="7" y="1" width="14" height="5" rx="2" fill="#facc15" stroke="#fff" strokeWidth="1.5" />
+      <rect x="4" y="5" width="20" height="11" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="1.5" />
+      <rect x="0" y="8" width="5" height="6" rx="1.5" fill="#1e3a8a" stroke="#fff" strokeWidth="1" />
+      <rect x="23" y="8" width="5" height="6" rx="1.5" fill="#1e3a8a" stroke="#fff" strokeWidth="1" />
+      <circle cx="14" cy="11" r="2.5" fill="#fff" />
+    </g>
+  )
 }
 
-export default function DashboardContent({ userFullName, userRole }: DashboardContentProps) {
-  const router = useRouter()
+const deg = (v: number | null | undefined, digits = 1) => (v != null ? `${v.toFixed(digits)}°` : '—')
 
-  // Coba sesi RUNNING dulu (livestream aktif), fallback ke sesi COMPLETED terakhir
+// heading is stored as text: compass letters from seed data ("NE") or degrees from the ROV ("182.5")
+const fmtHeading = (h: string | number | null | undefined) =>
+  h == null || h === '' ? '—' : Number.isFinite(Number(h)) ? deg(Number(h), 0) : String(h)
+
+export default function DashboardContent() {
+  // Ticks every second so "Updated Xs ago" and the live duration stay current
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Running mission first (live), otherwise the last completed one
   const { data: activeSessionData, error: activeSessionError } = useSWR(
     '/api/sessions/active',
     fetcher,
     { refreshInterval: 5000, shouldRetryOnError: false, errorRetryCount: 0, revalidateOnFocus: false }
   )
   const hasRunning = !!(activeSessionData as any)?.data
+  // Last mission regardless of status — auto-aborted missions are real missions too
   const { data: completedSessionData, error: completedSessionError, isLoading: sessionLoading } = useSWR(
-    hasRunning ? null : '/api/sessions?limit=1&sort=desc&status_filter=Completed',
+    hasRunning ? null : '/api/sessions?limit=1&sort=desc',
     fetcher,
     { refreshInterval: 30000, revalidateOnFocus: false }
   )
@@ -128,7 +104,7 @@ export default function DashboardContent({ userFullName, userRole }: DashboardCo
         return Array.isArray(raw) ? raw[0] : raw
       })()
 
-  // Telemetri & AUV harus dari sesi yang sama dengan info misi di atas, bukan baris terbaru global
+  // Telemetry & AUV must come from the same mission as the header strip, not the latest global row
   const { data: telemetryData } = useSWR(
     session?.id ? `/api/telemetry/latest?session_id=${session.id}` : null,
     fetcher,
@@ -144,80 +120,68 @@ export default function DashboardContent({ userFullName, userRole }: DashboardCo
     fetcher,
     { refreshInterval: 5000, revalidateOnFocus: false }
   )
+  // Whole-mission averages + depth series. The endpoint defaults to the last 24h, so widen the window.
+  const { data: summaryData } = useSWR(
+    session?.id ? `/api/analytics/telemetry?session_id=${session.id}&hours=876000` : null,
+    fetcher,
+    { refreshInterval: hasRunning ? 10000 : 0, revalidateOnFocus: false }
+  )
   const telemetry = (telemetryData as any)?.data
+  const summary = (summaryData as any)?.data?.summary
+  const depthSeries: Array<{ time: string; value: number }> = (summaryData as any)?.data?.depth ?? []
   const auv = (auvData as any)?.data
   const fishRaw = (fishData as any)?.data
 
-  // Loading state
   if (sessionLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-3 text-gray-400">
-          <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-400 rounded-full animate-spin" />
-          <p className="text-sm">Memuat data...</p>
+        <div className="flex flex-col items-center gap-3 text-gray-500">
+          <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+          <p className="text-sm">Loading…</p>
         </div>
       </div>
     )
   }
 
-  // Error state — gagal menghubungi server (404 di /sessions/active = memang tidak ada sesi aktif)
+  // 404 on /sessions/active just means no mission is running
   const sessionFetchFailed = [activeSessionError, completedSessionError]
     .some(err => err && !isApiStatus(err, 404))
   if (!session && sessionFetchFailed) {
-    return (
-      <div className="flex flex-col items-center justify-center h-80 text-center">
-        <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mb-4">
-          <Anchor className="w-9 h-9 text-blue-300" />
-        </div>
-        <h3 className="text-lg font-semibold text-gray-600 mb-1">Gagal Memuat Data</h3>
-        <p className="text-sm text-gray-400 max-w-xs">
-          Periksa koneksi ke server. Data akan dimuat ulang otomatis.
-        </p>
-      </div>
-    )
+    return <EmptyState title="Couldn't load data" text="Check the connection to the server. The page retries automatically." />
   }
-
-  // Empty state — belum ada misi sama sekali
   if (!session) {
-    return (
-      <div className="flex flex-col items-center justify-center h-80 text-center">
-        <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mb-4">
-          <Anchor className="w-9 h-9 text-blue-300" />
-        </div>
-        <h3 className="text-lg font-semibold text-gray-600 mb-1">Belum Ada Misi</h3>
-        <p className="text-sm text-gray-400 max-w-xs">
-          Dashboard akan menampilkan data setelah misi pertama dimulai.
-        </p>
-      </div>
-    )
+    return <EmptyState title="No missions yet" text="The dashboard shows data once the first mission starts." />
   }
 
-  // Ada misi — tampilkan semua data
-  const ph = telemetry?.phLevel ?? 0
-  const tds = telemetry?.tdsValue ?? 0
-  const doVal = telemetry?.dissolvedOxygen ?? 0
-  const temp = telemetry?.waterTemp ?? 0
+  const isLive = session.status === 'Running'
+  const startMs = session.startTime ? new Date(session.startTime).getTime() : null
+  const endMs = session.endTime ? new Date(session.endTime).getTime() : null
+  const duration = startMs ? fmtDuration((isLive ? now : endMs ?? now) - startMs) : '—'
 
-  const misiTerakhir = session.locationName ?? '—'
-  const tanggalMisi = session.startTime
-    ? new Date(session.startTime).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
-    : '—'
-  const durasi = (() => {
-    if (!session.startTime) return '—'
-    const end = session.endTime ? new Date(session.endTime) : new Date()
-    const diffMs = end.getTime() - new Date(session.startTime).getTime()
-    if (diffMs <= 0) return '—'
-    const h = Math.floor(diffMs / 3600000)
-    const m = Math.floor((diffMs % 3600000) / 60000)
-    const s = Math.floor((diffMs % 60000) / 1000)
-    return h > 0 ? `${h}j ${String(m).padStart(2,'0')}m` : `${m}m ${String(s).padStart(2,'0')}d`
-  })()
-  const lokasi = session.locationName ?? '—'
+  const lastDataMs = Math.max(
+    telemetry?.timestamp ? new Date(telemetry.timestamp).getTime() : 0,
+    auv?.timestamp ? new Date(auv.timestamp).getTime() : 0,
+  )
+  const agoSec = lastDataMs ? (now - lastDataMs) / 1000 : null
 
-  const speciesCounts: Array<{speciesName: string; totalCount: number}> = Array.isArray(fishRaw?.counts) ? fishRaw.counts : []
+  const hasTelemetry = (summary?.dataPoints ?? 0) > 0 || !!telemetry
+  const hasSensorData = hasTelemetry || !!auv
+  // Live: current reading. Finished: average over the whole mission.
+  const water = isLive
+    ? { ph: telemetry?.phLevel, tds: telemetry?.tdsValue, do: telemetry?.dissolvedOxygen, temp: telemetry?.waterTemp }
+    : hasTelemetry
+      ? { ph: summary?.avgPh, tds: summary?.avgTds, do: summary?.avgDo, temp: summary?.avgTemp }
+      : { ph: null, tds: null, do: null, temp: null }
+  const avg = isLive ? '' : 'Avg '
+  const depths = depthSeries.map(d => d.value)
+  // ponytail: series points are bucket averages for long missions, so max depth is slightly under the true peak
+  const maxDepth = depths.length ? Math.max(...depths) : null
+  const avgDepth = depths.length ? depths.reduce((a, b) => a + b, 0) / depths.length : null
+  const chartData = depthSeries.map(d => ({ t: new Date(d.time).getTime(), depth: d.value }))
+
+  const speciesCounts: Array<{ speciesName: string; totalCount: number }> = Array.isArray(fishRaw?.counts) ? fishRaw.counts : []
   const speciesTotal: number = fishRaw?.totalFish ?? 0
   const speciesChartData = speciesCounts.map(c => ({ name: c.speciesName, value: c.totalCount }))
-  const hasSpeciesData = speciesChartData.length > 0
 
   const sensorHealth = [
     { label: 'Gyroscope', ok: !!auv?.gyroscope },
@@ -228,137 +192,145 @@ export default function DashboardContent({ userFullName, userRole }: DashboardCo
   return (
     <div className="space-y-4">
 
-      {/* Row 1: Info Misi */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <InfoCard label="Misi Terakhir" value={misiTerakhir} icon={Sailboat} iconBg="bg-blue-400" />
-        <InfoCard label="Tanggal, Waktu" value={tanggalMisi} icon={CalendarDays} iconBg="bg-teal-400" />
-        <InfoCard label="Durasi" value={durasi} icon={Timer} iconBg="bg-yellow-400" />
-        <InfoCard label="Lokasi Misi" value={lokasi} icon={MapPin} iconBg="bg-red-400" />
+      {/* Mission strip */}
+      <div className={`${card} px-5 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between`}>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-lg font-semibold tracking-tight text-gray-900">{session.locationName || 'Untitled mission'}</h2>
+            {isLive ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500 motion-safe:animate-pulse" /> LIVE
+              </span>
+            ) : (
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">{session.status}</span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-gray-500">
+            {startMs ? `Started ${fmtDateTime(session.startTime)}` : 'Start time unknown'}
+            {!isLive && endMs ? ` · Ended ${fmtDateTime(session.endTime)}` : ''}
+            {' · '}{duration}
+          </p>
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-4 text-sm">
+          {isLive && (
+            <span className={agoSec != null && agoSec <= STALE_SECONDS ? 'text-gray-500' : 'text-amber-700'}>
+              {agoSec != null ? `Updated ${fmtAgo(agoSec)}` : 'Waiting for data'}
+            </span>
+          )}
+          <Link href="/dashboard/recordings" className="inline-flex items-center gap-0.5 font-medium text-blue-600 hover:text-blue-700">
+            View recordings <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
 
-      {/* Row 2: Water Quality */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <WaterCard label="pH Air" value={ph.toFixed(1)} unit="pH" status={getPhStatus(ph)} barPercent={progressPercent(ph, 14)} icon={Droplets} iconColor="text-blue-400" />
-        <WaterCard label="TDS" value={tds.toFixed(0)} unit="ppm" status={getTdsStatus(tds)} barPercent={progressPercent(tds, 1000)} icon={Zap} iconColor="text-yellow-400" />
-        <WaterCard label="DO (Dissolved Oxygen)" value={doVal.toFixed(1)} unit="mg/L" status={getDoStatus(doVal)} barPercent={progressPercent(doVal, 15)} icon={Wind} iconColor="text-red-400" />
-        <WaterCard label="Suhu Air" value={temp.toFixed(1)} unit="°C" status={getTempStatus(temp)} barPercent={progressPercent(temp, 50)} icon={Thermometer} iconColor="text-green-400" />
-      </div>
+      {/* Water quality + dive profile, or a clear notice when the mission recorded none */}
+      {!hasSensorData && !isLive ? null : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <SensorCard label={`${avg}pH`} value={water.ph} unit="pH" status={getPhStatus} />
+          {/* TDS status hidden until the team sets seawater thresholds (old 200–500 ppm = freshwater) */}
+          <SensorCard label={`${avg}TDS`} value={water.tds} unit="ppm" />
+          <SensorCard label={`${avg}dissolved oxygen`} value={water.do} unit="mg/L" status={getDoStatus} />
+          <SensorCard label={`${avg}water temperature`} value={water.temp} unit="°C" status={getTempStatus} />
+        </div>
+      )}
 
-      {/* Row 3: Telemetry + Species */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
-        {/* Telemetry Data */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-700 flex items-center gap-2">
-              <Navigation className="w-4 h-4 text-blue-500" />
-              Telemetry Data
-            </h2>
-            <button
-              onClick={() => router.push('/dashboard/recordings')}
-              className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
-            >
-              Buka Recording <ChevronRight className="w-3 h-3" />
-            </button>
+        {!hasSensorData && !isLive ? (
+          <div className={`lg:col-span-2 ${card} flex flex-col items-center justify-center p-10 text-center`}>
+            <p className="text-base font-semibold text-gray-700">No sensor data recorded for this mission</p>
+            <p className="mt-1 max-w-sm text-sm text-gray-500">Water quality and AUV readings were not received while it ran. Fish detections are still shown.</p>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Gauge className="w-4 h-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-600">Attitude</span>
-              </div>
-              <div className="space-y-2">
-                {[
-                  { label: 'Roll', value: auv?.roll != null ? `${auv.roll.toFixed(1)}°` : '—' },
-                  { label: 'Pitch', value: auv?.pitch != null ? `${auv.pitch.toFixed(1)}°` : '—' },
-                  { label: 'Yaw', value: auv?.yaw != null ? `${auv.yaw.toFixed(0)}°` : '—' },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500">{label}</span>
-                    <span className="font-semibold text-gray-800">{value}</span>
-                  </div>
-                ))}
-              </div>
+        ) : (
+          <div className={`lg:col-span-2 ${card} p-5 flex flex-col`}>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-base font-semibold text-gray-900">Dive profile</h2>
+              <p className="text-sm text-gray-500">
+                {maxDepth != null ? `Max ${maxDepth.toFixed(1)} m · Avg ${avgDepth!.toFixed(1)} m` : ''}
+              </p>
             </div>
+            {chartData.length > 1 ? (
+              <div className="mt-3 min-h-48 flex-1">{/* grows to match the Species card */}
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                    <CartesianGrid stroke="#f3f4f6" vertical={false} />
+                    <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} scale="time" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} tickMargin={8} padding={{ left: 16, right: 8 }} minTickGap={24}
+                      tickFormatter={(t: number) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} />
+                    {/* Reversed so deeper is lower, like a real dive */}
+                    <YAxis reversed tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} unit=" m" width={56} tickMargin={8} />
+                    <Tooltip labelFormatter={(t) => new Date(Number(t)).toLocaleTimeString('en-GB')} formatter={(v) => [`${Number(v).toFixed(2)} m`, 'Depth']}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '12px' }} />
+                    <Area type="monotone" dataKey="depth" stroke="#2563eb" strokeWidth={2} fill="#dbeafe" isAnimationActive={false}
+                      activeDot={(p: { cx?: number; cy?: number; index?: number }) => <RovMarker key={p.index} cx={p.cx} cy={p.cy} />} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="mt-3 flex min-h-48 flex-1 items-center justify-center text-sm text-gray-500">
+                {isLive ? 'Waiting for depth readings…' : 'Not enough depth readings to draw a profile'}
+              </div>
+            )}
 
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <MapPin className="w-4 h-4 text-red-400" />
-                <span className="text-sm font-medium text-gray-600">Posisi</span>
-              </div>
-              <div className="space-y-2">
-                {[
-                  { label: 'Depth', value: auv?.depth != null ? `${auv.depth.toFixed(1)} m` : '—' },
-                  { label: 'Heading', value: auv?.heading ?? '—' },
-                  { label: 'Speed', value: auv?.speed != null ? `${auv.speed.toFixed(1)} kts` : '—' },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500">{label}</span>
-                    <span className="font-semibold text-gray-800">{value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="md:col-span-2 bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Activity className="w-4 h-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-600">Health</span>
-              </div>
-              <div className="space-y-2">
-                {sensorHealth.map(({ label, ok }) => (
-                  <div key={label} className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500">{label}</span>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ok ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                      {ok ? 'OK' : 'N/A'}
+            {isLive && (
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-3">
+                  <Stat label="Depth" value={auv?.depth != null ? `${auv.depth.toFixed(1)} m` : '—'} />
+                  <Stat label="Heading" value={fmtHeading(auv?.heading)} />
+                  <Stat label="Speed" value={auv?.speed != null ? `${auv.speed.toFixed(1)} kts` : '—'} />
+                  <Stat label="Roll" value={deg(auv?.roll)} />
+                  <Stat label="Pitch" value={deg(auv?.pitch)} />
+                  <Stat label="Yaw" value={deg(auv?.yaw, 0)} />
+                </div>
+                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+                  {sensorHealth.map(({ label, ok }) => (
+                    <span key={label} className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+                      <span className={`h-2 w-2 rounded-full ${ok ? 'bg-green-500' : 'border border-gray-300'}`} />
+                      {label}
+                      <span className={`text-xs font-medium ${ok ? 'text-green-700' : 'text-gray-400'}`}>{ok ? 'OK' : 'N/A'}</span>
                     </span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* Species Distribution */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h2 className="font-semibold text-gray-700 mb-4">Species Distribution</h2>
-          {hasSpeciesData ? (
+        {/* Species */}
+        <div className={`${card} p-5`}>
+          <h2 className="text-base font-semibold text-gray-900">Species</h2>
+          {speciesChartData.length > 0 ? (
             <div className="flex flex-col items-center">
               <div className="relative w-full h-52">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={speciesChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" startAngle={90} endAngle={-270}>
-                      {speciesChartData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={SPECIES_COLORS[index % SPECIES_COLORS.length]} />
+                      {speciesChartData.map((entry, index) => (
+                        <Cell key={entry.name} fill={getSpeciesColor(entry.name, index)} />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '12px' }} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-3xl font-bold text-gray-800">{speciesTotal}</span>
-                  <span className="text-xs text-gray-400">Total</span>
+                  <span className="text-3xl font-semibold tracking-tight text-gray-900">{speciesTotal}</span>
+                  <span className="text-xs text-gray-500">total</span>
                 </div>
               </div>
               <div className="w-full space-y-1.5 mt-2">
                 {speciesChartData.map((entry, index) => (
                   <div key={entry.name} className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: SPECIES_COLORS[index % SPECIES_COLORS.length] }} />
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: getSpeciesColor(entry.name, index) }} />
                       <span className="text-gray-600">{entry.name}</span>
                     </div>
-                    <span className="font-medium text-gray-700">{entry.value}</span>
+                    <span className="font-medium text-gray-900">{entry.value}</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-52">
-              <div className="w-20 h-20 rounded-full border-4 border-dashed border-gray-200 flex items-center justify-center mb-3">
-                <span className="text-3xl">🐟</span>
-              </div>
-              <p className="text-sm text-gray-400">Belum ada data deteksi</p>
+            <div className="flex h-52 items-center justify-center">
+              <p className="text-sm text-gray-500">No fish detected in this mission yet</p>
             </div>
           )}
         </div>
