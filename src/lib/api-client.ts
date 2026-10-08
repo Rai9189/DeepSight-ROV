@@ -112,7 +112,9 @@ async function endSessionAndRedirect(): Promise<void> {
   } catch {
     // Backend tidak terjangkau — tetap redirect
   }
-  window.location.href = '/auth/login'
+  // Kembalikan user ke halaman yang sedang dibuka setelah login ulang
+  const here = window.location.pathname + window.location.search
+  window.location.href = `/auth/login?callbackUrl=${encodeURIComponent(here)}`
 }
 
 // ==============================
