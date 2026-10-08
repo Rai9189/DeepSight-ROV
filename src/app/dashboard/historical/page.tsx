@@ -9,8 +9,7 @@ export default async function HistoricalPage() {
     <>
       <Header
         title="Historical"
-        subtitle="Historical Data & Mission Report"
-        emoji="📊"
+        subtitle="Past missions and reports"
       />
       <main className="p-0 lg:px-4 mt-4">
         <HistoricalContent />

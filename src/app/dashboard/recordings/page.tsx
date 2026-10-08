@@ -26,7 +26,7 @@ export default async function RecordingsPage() {
 
   return (
     <>
-      <Header title="Recordings" subtitle="Manage AUV Video Recordings" emoji="📹" />
+      <Header title="Recordings" subtitle="Mission video recordings" />
       <main className="px-6 py-4">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <RecordingsTable recordings={recordings} />

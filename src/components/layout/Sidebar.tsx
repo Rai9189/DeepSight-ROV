@@ -3,197 +3,119 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Radio, Users, Video, Menu, X, Home, LogOut, ChevronLeft, BarChart3, HelpCircle, History } from 'lucide-react'
+import { Anchor, Radio, Users, Video, Menu, X, Home, ChevronLeft, BarChart3, HelpCircle, History, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import LogoutButton from '../auth/LogoutButton'
 import type { AuthSession } from '@/lib/auth-utils'
+import { SIDEBAR_COOKIE } from '@/lib/sidebar'
 
 interface SidebarProps {
   session: AuthSession
+  defaultCollapsed: boolean
 }
 
-const Sidebar = ({ session }: SidebarProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(false)
+type NavItem = { label: string; href: string; icon: LucideIcon }
+
+const MAIN_ITEMS: NavItem[] = [
+  { label: 'Dashboard',   href: '/dashboard',            icon: Home },
+  { label: 'Live Stream', href: '/dashboard/stream',     icon: Radio },
+  { label: 'Recordings',  href: '/dashboard/recordings', icon: Video },
+  { label: 'Analytics',   href: '/dashboard/analytics',  icon: BarChart3 },
+  { label: 'Historical',  href: '/dashboard/historical', icon: History },
+  { label: 'Help',        href: '/dashboard/help',       icon: HelpCircle },
+]
+const ADMIN_ITEMS: NavItem[] = [{ label: 'Users', href: '/dashboard/users', icon: Users }]
+
+
+const Sidebar = ({ session, defaultCollapsed }: SidebarProps) => {
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const pathname = usePathname()
+  const { role } = session.user
 
   useEffect(() => {
-    const body = document.body
-    if (isCollapsed) body.classList.add('sidebar-collapsed')
-    else body.classList.remove('sidebar-collapsed')
-    return () => { body.classList.remove('sidebar-collapsed') }
+    document.cookie = `${SIDEBAR_COOKIE}=${isCollapsed ? 1 : 0}; path=/; max-age=31536000; samesite=lax`
   }, [isCollapsed])
-
-  const mainMenuItems = [
-    { id: 'dashboard',  label: 'Dashboard',      href: '/dashboard',            icon: Home,      description: 'Overview and mission control',  roles: ['USER', 'ADMIN'] },
-    { id: 'stream',     label: 'Live Stream',     href: '/dashboard/stream',     icon: Radio,     description: 'Real-time underwater feed',      roles: ['USER', 'ADMIN'] },
-    { id: 'recordings', label: 'Recordings',      href: '/dashboard/recordings', icon: Video,     description: 'Saved mission videos',           roles: ['USER', 'ADMIN'] },
-    { id: 'analytics',  label: 'Analytics',       href: '/dashboard/analytics',  icon: BarChart3, description: 'Mission data & insights',        roles: ['USER', 'ADMIN'] },
-    { id: 'historical', label: 'Historical Data', href: '/dashboard/historical', icon: History,   description: 'Mission history & reports',      roles: ['USER', 'ADMIN'] },
-  ]
-
-  const adminMenuItems = [
-    { id: 'users', label: 'Manage User', href: '/dashboard/users', icon: Users, description: 'User management & roles', roles: ['ADMIN'] },
-  ]
-
-  const generalMenuItems = [
-    { id: 'help', label: 'Help', href: '/dashboard/help', icon: HelpCircle, description: 'Support & documentation', roles: ['USER', 'ADMIN'] },
-  ]
-
-  const filteredMainItems    = mainMenuItems.filter(item => item.roles.includes(session.user.role))
-  const filteredAdminItems   = adminMenuItems.filter(item => item.roles.includes(session.user.role))
 
   const isActive = (href: string) =>
     href === '/dashboard' ? pathname === href : pathname.startsWith(href)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const MenuSection = ({ title, items }: { title?: string; items: any[] }) => (
-    <div className="space-y-1">
-      {title && !isCollapsed && (
-        <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 mt-4 first:mt-0">
-          {title}
-        </p>
-      )}
-      {items.map((item) => {
-        const Icon   = item.icon
-        const active = isActive(item.href)
+  const NavLinks = ({ items }: { items: NavItem[] }) => (
+    <div className="space-y-0.5 px-2">
+      {items.map(({ label, href, icon: Icon }) => {
+        const active = isActive(href)
         return (
           <Link
-            key={item.id}
-            href={item.href}
+            key={href}
+            href={href}
             onClick={() => setIsMobileOpen(false)}
-            className={`flex items-start px-4 py-2.5 text-sm transition-colors duration-300 ease-out relative group mx-2 rounded-lg ${
-              active ? 'bg-blue-50 border-r-4 border-blue-600' : 'hover:bg-gray-50'
-            } ${isCollapsed ? 'justify-center mx-1' : ''}`}
-            title={isCollapsed ? item.label : undefined}
+            aria-current={active ? 'page' : undefined}
+            title={isCollapsed ? label : undefined}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 ${
+              active ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            } ${isCollapsed ? 'justify-center' : ''}`}
           >
-            <Icon className={`h-5 w-5 flex-shrink-0 transition-colors duration-300 ease-out ${active ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`} />
-            {!isCollapsed && (
-              <div className="ml-3 flex-1 overflow-hidden">
-                <div className={`font-medium transition-colors duration-300 ease-out whitespace-nowrap ${active ? 'text-blue-600' : 'text-gray-700 group-hover:text-gray-900'}`}>
-                  {item.label}
-                </div>
-                <div className={`text-xs mt-0.5 transition-colors duration-300 ease-out whitespace-nowrap ${active ? 'text-blue-500' : 'text-gray-500 group-hover:text-gray-600'}`}>
-                  {item.description}
-                </div>
-              </div>
-            )}
-            {!isCollapsed && item.badge && (
-              <Badge
-                variant="secondary"
-                className="ml-auto text-xs"
-              >
-                {item.badge}
-              </Badge>
-            )}
+            <Icon className={`h-5 w-5 flex-shrink-0 ${active ? 'text-blue-600' : 'text-gray-400'}`} />
+            {!isCollapsed && <span className="truncate">{label}</span>}
           </Link>
         )
       })}
     </div>
   )
 
-  const UserInfo = isCollapsed ? 'button' : 'div'
-
   return (
     <>
       {isMobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setIsMobileOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/20 z-40 lg:hidden" onClick={() => setIsMobileOpen(false)} />
       )}
 
       {/* Mobile toggle button */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
-        <Button variant="outline" size="icon" onClick={() => setIsMobileOpen(true)} className="bg-white shadow-lg" aria-label="Open menu">
+        <Button variant="outline" size="icon" onClick={() => setIsMobileOpen(true)} className="bg-white" aria-label="Open menu">
           <Menu className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* Sidebar */}
-      <div className={`fixed top-0 left-0 h-full bg-white border-r border-gray-200 shadow-sm transition-[width,transform] duration-500 ease-out z-50 flex flex-col transform-gpu ${
-        isCollapsed ? 'w-16' : 'w-72'
+      <aside data-collapsed={isCollapsed} className={`fixed top-0 left-0 h-full bg-white border-r border-gray-200 transition-[width,transform] duration-200 ease-out z-50 flex flex-col ${
+        isCollapsed ? 'w-16' : 'w-64'
       } ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
 
-        {/* User info */}
-        <div className="px-3 py-4 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <UserInfo
-              {...(isCollapsed && { type: 'button' as const, onClick: () => setIsCollapsed(false), 'aria-label': 'Expand sidebar' })}
-              className={`flex items-center space-x-3 flex-1 min-w-0 text-left ${isCollapsed ? 'cursor-pointer rounded-full' : ''}`}
-            >
-              <div className={`rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-medium shadow-lg flex-shrink-0 ${
-                isCollapsed ? 'w-10 h-10 text-xs' : 'w-12 h-12 text-sm'
-              }`}>
-                {session.user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+        {/* Brand */}
+        <div className={`flex h-16 flex-shrink-0 items-center border-b border-gray-200 ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-4'}`}>
+          {isCollapsed ? (
+            <button type="button" onClick={() => setIsCollapsed(false)} aria-label="Expand sidebar"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300">
+              <Anchor className="h-5 w-5 text-white" />
+            </button>
+          ) : (
+            <>
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-600">
+                <Anchor className="h-5 w-5 text-white" />
               </div>
-              <div className={`flex-1 min-w-0 overflow-hidden transition-[opacity,transform] duration-300 ease-out ${
-                isCollapsed ? 'opacity-0 -translate-x-4 w-0' : 'opacity-100 translate-x-0 w-auto'
-              }`}>
-                <p className="text-sm font-semibold text-gray-900 truncate">{session.user.fullName}</p>
-                <p className="text-xs text-gray-500 truncate">{session.user.email}</p>
-                <Badge
-                  variant={session.user.role === 'ADMIN' ? 'default' : 'secondary'}
-                  className="text-xs mt-1"
-                >
-                  {session.user.role}
-                </Badge>
-              </div>
-            </UserInfo>
-            {!isCollapsed && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsCollapsed(true)}
-                aria-label="Collapse sidebar"
-                className="hidden lg:flex h-8 w-8 hover:bg-gray-100 flex-shrink-0 ml-2"
-              >
+              <span className="flex-1 truncate text-base font-semibold tracking-tight text-gray-900">Carter Island AUV</span>
+              <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(true)} aria-label="Collapse sidebar" className="hidden lg:flex h-8 w-8 text-gray-400">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsMobileOpen(false)}
-            className="lg:hidden absolute top-4 right-4 h-8 w-8 z-10"
-            aria-label="Close menu"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+              <Button variant="ghost" size="icon" onClick={() => setIsMobileOpen(false)} aria-label="Close menu" className="lg:hidden h-8 w-8 text-gray-400">
+                <X className="h-4 w-4" />
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4">
-          <MenuSection title="MENU"  items={filteredMainItems} />
-          {filteredAdminItems.length > 0 && (
-            <MenuSection title="ADMIN" items={filteredAdminItems} />
+          <NavLinks items={MAIN_ITEMS} />
+          {role === 'ADMIN' && (
+            <div className="mt-4">
+              {isCollapsed
+                ? <div className="mx-4 mb-2 border-t border-gray-100" />
+                : <p className="mb-1 px-5 text-xs font-medium text-gray-400">Admin</p>}
+              <NavLinks items={ADMIN_ITEMS} />
+            </div>
           )}
-          <MenuSection title="GENERAL" items={generalMenuItems} />
         </nav>
 
-        {/* Logout */}
-        <div className="border-t border-gray-100 p-4">
-          <LogoutButton
-            className={`w-full flex items-start px-3 py-2.5 text-sm transition-colors duration-300 ease-out hover:bg-red-50 rounded-lg group mx-1 ${
-              isCollapsed ? 'justify-center' : ''
-            }`}
-          >
-            <LogOut className="h-5 w-5 flex-shrink-0 text-gray-400 group-hover:text-red-600 transition-colors duration-300 ease-out" />
-            {!isCollapsed && (
-              <div className="ml-3 flex-1 text-left overflow-hidden">
-                <div className="font-medium text-gray-700 group-hover:text-red-600 transition-colors duration-300 ease-out whitespace-nowrap">
-                  Logout
-                </div>
-                <div className="text-xs text-gray-500 group-hover:text-red-500 mt-0.5 transition-colors duration-300 ease-out whitespace-nowrap">
-                  Sign out of account
-                </div>
-              </div>
-            )}
-          </LogoutButton>
-        </div>
-      </div>
+      </aside>
     </>
   )
 }

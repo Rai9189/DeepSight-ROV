@@ -57,7 +57,7 @@ export default function UsersPage() {
 
   return (
     <>
-      <Header title="User Management" subtitle="Manage System Users and Permissions" emoji="🔧" />
+      <Header title="Users" subtitle="Manage accounts and roles" />
 
       <main className="px-6 py-4">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">

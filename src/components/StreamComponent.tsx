@@ -506,7 +506,7 @@ export default function StreamComponent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="Live Stream" subtitle="Live Stream — Command Center" emoji="🎥" />
+      <Header title="Live Stream" subtitle="Real-time camera feed and fish detection" />
 
       {showMissionSaveDialog && activeSession && (
         <MissionSaveDialog

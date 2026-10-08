@@ -9,8 +9,7 @@ export default async function HelpPage() {
     <>
       <Header
         title="Help"
-        subtitle="Help & Documentation"
-        emoji="📖"
+        subtitle="Guides and documentation"
       />
       <main className="p-0 lg:px-4 mt-4">
         <HelpContent />
