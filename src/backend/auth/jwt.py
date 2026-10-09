@@ -27,6 +27,7 @@ def create_access_token(
     role: str,
     full_name: Optional[str] = None,
     expires_delta: Optional[timedelta] = None,
+    must_change_password: bool = False,
 ) -> str:
     """
     Buat JWT access token.
@@ -64,6 +65,10 @@ def create_access_token(
     }
     if full_name:
         payload["fullName"] = full_name
+    # Dibaca frontend (requireAuth) untuk mengarahkan ke halaman ganti password;
+    # backend tetap memakai kolom DB (get_current_user) sebagai acuan.
+    if must_change_password:
+        payload["mustChangePassword"] = True
 
     token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return token

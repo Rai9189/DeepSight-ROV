@@ -1,261 +1,179 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api-client'
+import type { User } from '@/hooks/useUsersPagination'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
-interface User {
-  id: string; fullName: string; email: string; phoneNumber: string
-  role: 'USER' | 'ADMIN'; createdAt: string; updatedAt: string
+type Form = { fullName: string; email: string; phoneNumber: string; role: 'USER' | 'ADMIN' }
+const EMPTY: Form = { fullName: '', email: '', phoneNumber: '', role: 'USER' }
+
+// What each role can actually do (matches the admin-only endpoints in the backend)
+const ROLES: Array<{ value: Form['role']; label: string; text: string }> = [
+  { value: 'USER', label: 'User', text: 'Runs missions and views all data' },
+  { value: 'ADMIN', label: 'Admin', text: 'Also manages users and deletes recordings and missions' },
+]
+
+// Phone is typed after a fixed "+62": digits only, shown as 813-8208-3838.
+// Pasted 0813… / +62 813… / 62-813… lose the leading 0 or 62.
+// Same rule as check_phone in the backend: 8 then 8–11 digits (9–12 after +62)
+const MIN_PHONE_DIGITS = 9
+const MAX_PHONE_DIGITS = 12
+function localPhone(raw: string) {
+  let d = raw.replace(/\D/g, '')
+  if (d.startsWith('62')) d = d.slice(2)
+  else if (d.startsWith('0')) d = d.slice(1)
+  d = d.slice(0, MAX_PHONE_DIGITS)
+  return [d.slice(0, 3), d.slice(3, 7), d.slice(7)].filter(Boolean).join('-')
 }
 
-interface UserDialogProps {
-  isOpen: boolean; onClose: () => void; onSuccess: () => void
-  user?: User | null; mode: 'create' | 'edit' | 'view'
+// "Too short" waits until the field is left, so it doesn't nag while typing
+function phoneProblem(local: string, finished: boolean): string | null {
+  const d = local.replace(/-/g, '')
+  if (!d) return null
+  if (d[0] !== '8') return 'Mobile numbers start with 8, e.g. 813-8208-3838'
+  if (finished && d.length < MIN_PHONE_DIGITS) return `Too short — mobile numbers have ${MIN_PHONE_DIGITS} to ${MAX_PHONE_DIGITS} digits after +62`
+  return null
 }
 
-interface FormData {
-  fullName: string; email: string; password: string; phoneNumber: string; role: 'USER' | 'ADMIN'
-}
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
-export default function UserDialog({ isOpen, onClose, onSuccess, user, mode }: UserDialogProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [formData, setFormData] = useState<FormData>({
-    fullName: '', email: '', password: '', phoneNumber: '', role: 'USER'
-  })
-  const [errors, setErrors] = useState<Partial<FormData>>({})
+const inputCls = 'h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-500'
+
+// Add or edit a user. Passwords are never typed here: the server creates a temporary one (see onCreated).
+export default function UserDialog({ open, user, isSelf, onClose, onSaved, onCreated }: {
+  open: boolean
+  user: User | null               // null = add
+  isSelf: boolean
+  onClose: () => void
+  onSaved: () => void
+  onCreated: (name: string, temporaryPassword: string) => void
+}) {
+  const [form, setForm] = useState<Form>(EMPTY)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [phoneTouched, setPhoneTouched] = useState(false)
 
   useEffect(() => {
-    if (!isOpen) return
-    setErrors({})
-    if (mode === 'create') {
-      setFormData({ fullName: '', email: '', password: '', phoneNumber: '', role: 'USER' })
-    } else if (user) {
-      setFormData({ fullName: user.fullName || '', email: user.email || '', password: '', phoneNumber: user.phoneNumber || '', role: user.role || 'USER' })
-    }
-  }, [isOpen, mode, user])
+    if (!open) return
+    setError(null)
+    setPhoneTouched(false)
+    setForm(user ? { fullName: user.fullName, email: user.email, phoneNumber: localPhone(user.phoneNumber), role: user.role } : EMPTY)
+  }, [open, user])
 
-  const validate = () => {
-    const errs: Partial<FormData> = {}
-    if (!formData.fullName.trim()) errs.fullName = 'Nama lengkap wajib diisi'
-    if (!formData.email.trim()) errs.email = 'Email wajib diisi'
-    if (!formData.phoneNumber.trim()) errs.phoneNumber = 'No. telepon wajib diisi'
-    if (mode === 'create' && !formData.password.trim()) errs.password = 'Password wajib diisi'
-    if (formData.password.trim() && formData.password.length < 8) errs.password = 'Min. 8 karakter'
-    return errs
-  }
+  const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const phoneError = phoneProblem(form.phoneNumber, phoneTouched)
+  const phoneInvalid = !!phoneProblem(form.phoneNumber, true)
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const errs = validate()
-    if (Object.keys(errs).length > 0) { setErrors(errs); return }
-    setIsLoading(true)
+    if (phoneInvalid) { setPhoneTouched(true); return }
+    setSaving(true)
+    setError(null)
     try {
-      const submitData: Record<string, unknown> = {
-        fullName: formData.fullName, email: formData.email,
-        phoneNumber: formData.phoneNumber, role: formData.role
+      // Stored as +62-813-8208-3838, the format existing accounts already use
+      const body = { ...form, phoneNumber: form.phoneNumber && `+62-${form.phoneNumber}` }
+      if (user) {
+        await apiClient.put(`/api/users/${user.id}`, body)
+        toast.success('Changes saved')
+        onSaved()
+      } else {
+        const res = await apiClient.post<{ temporaryPassword: string }>('/api/users', body)
+        onSaved()
+        onCreated(form.fullName, res.temporaryPassword)
       }
-      if (mode === 'create' || formData.password.trim()) submitData.password = formData.password
-      const data: any = mode === 'create'
-        ? await apiClient.post('/api/users', submitData)
-        : await apiClient.put(`/api/users/${user?.id}`, submitData)
-      toast.success(data.message || (mode === 'create' ? 'Pengguna berhasil ditambahkan' : 'Pengguna berhasil diperbarui'))
-      onSuccess()
       onClose()
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : 'Gagal menyimpan pengguna')
+    } catch (err) {
+      // Server validation (email taken, invalid phone, last admin…) stays in the form
+      setError(err instanceof Error ? err.message : "Couldn't save the user")
     } finally {
-      setIsLoading(false)
+      setSaving(false)
     }
   }
-
-  const handleClose = () => {
-    setFormData({ fullName: '', email: '', password: '', phoneNumber: '', role: 'USER' })
-    setErrors({})
-    onClose()
-  }
-
-  if (!isOpen) return null
-
-  const title = mode === 'create' ? 'Tambah Pengguna Baru'
-    : mode === 'edit' ? `Edit Pengguna — ${user?.fullName}`
-    : `Detail Pengguna — ${user?.fullName}`
-
-  const subtitle = mode === 'create' ? 'Isi data pengguna di bawah ini.'
-    : mode === 'edit' ? 'Ubah data pengguna di bawah ini.'
-    : ''
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+    <Dialog open={open} onOpenChange={o => { if (!o && !saving) onClose() }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold">{user ? 'Edit user' : 'Add user'}</DialogTitle>
+          <DialogDescription>
+            {user ? `Added ${fmtDate(user.createdAt)} · Updated ${fmtDate(user.updatedAt)}` : 'A temporary password is created for them.'}
+          </DialogDescription>
+        </DialogHeader>
 
-        {/* Header — dark */}
-        <div className="bg-gray-900 px-6 py-5 flex items-start justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-white">{title}</h2>
-            {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
-          </div>
-          <button onClick={handleClose} className="text-gray-400 hover:text-white transition-colors text-xl leading-none mt-0.5">&times;</button>
-        </div>
+        <form onSubmit={submit} className="space-y-4">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Full name</span>
+            <input required value={form.fullName} onChange={set('fullName')} autoComplete="off" className={`mt-1.5 ${inputCls}`} />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Email</span>
+            <input required type="email" value={form.email} onChange={set('email')} autoComplete="off" className={`mt-1.5 ${inputCls}`} />
+            <span className="mt-1 block text-xs text-gray-500">Used to sign in</span>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Phone</span>
+            <div className={`mt-1.5 flex rounded-lg focus-within:ring-2 ${phoneError ? 'ring-1 ring-red-300 focus-within:ring-red-100' : 'focus-within:ring-blue-100'}`}>
+              <span className="flex items-center rounded-l-lg border border-r-0 border-gray-200 bg-gray-50 px-3 text-sm text-gray-600">+62</span>
+              <input
+                required
+                type="tel"
+                inputMode="numeric"
+                autoComplete="off"
+                value={form.phoneNumber}
+                onChange={e => setForm(f => ({ ...f, phoneNumber: localPhone(e.target.value) }))}
+                onBlur={() => setPhoneTouched(true)}
+                aria-invalid={!!phoneError}
+                aria-describedby="phone-hint"
+                placeholder="813-8208-3838"
+                className={`${inputCls} rounded-l-none focus-visible:ring-0`}
+              />
+            </div>
+            <span id="phone-hint" className={`mt-1 block text-xs ${phoneError ? 'text-red-600' : 'text-gray-500'}`}>
+              {phoneError ?? 'Indonesian mobile number'}
+            </span>
+          </label>
 
-        {/* Body */}
-        <div className="px-6 py-5">
-          {mode === 'view' ? (
-            <div className="space-y-4">
-              {[
-                { label: 'Nama Lengkap', value: user?.fullName },
-                { label: 'Email', value: user?.email },
-                { label: 'No. Telepon', value: user?.phoneNumber },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <p className="text-xs text-gray-400 mb-1">{label}</p>
-                  <p className="text-sm font-medium text-gray-800">{value || '—'}</p>
-                </div>
+          <fieldset disabled={isSelf}>
+            <legend className="text-sm font-medium text-gray-700">Role</legend>
+            <div className="mt-1.5 space-y-2">
+              {ROLES.map(r => (
+                <label
+                  key={r.value}
+                  className={`flex cursor-pointer gap-3 rounded-lg border px-3 py-2.5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-100 ${form.role === r.value ? 'border-blue-500 bg-blue-50/50' : 'border-gray-200'} ${isSelf ? 'cursor-not-allowed opacity-60' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="role"
+                    value={r.value}
+                    checked={form.role === r.value}
+                    onChange={() => setForm(f => ({ ...f, role: r.value }))}
+                    className="mt-0.5 accent-blue-600"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-900">{r.label}</span>
+                    <span className="block text-xs text-gray-500">{r.text}</span>
+                  </span>
+                </label>
               ))}
-              <div>
-                <p className="text-xs text-gray-400 mb-1">Role</p>
-                <span className={`text-xs font-bold px-3 py-1 rounded-lg ${user?.role === 'ADMIN' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>
-                  {user?.role}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Dibuat</p>
-                  <p className="text-xs text-gray-600">{user?.createdAt ? new Date(user.createdAt).toLocaleDateString('id-ID') : '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Diperbarui</p>
-                  <p className="text-xs text-gray-600">{user?.updatedAt ? new Date(user.updatedAt).toLocaleDateString('id-ID') : '—'}</p>
-                </div>
-              </div>
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Nama Lengkap */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                  Nama Lengkap <span className="text-red-500">*</span>
-                </label>
-                <input
-                  value={formData.fullName}
-                  onChange={e => { setFormData(p => ({ ...p, fullName: e.target.value })); setErrors(p => ({ ...p, fullName: undefined })) }}
-                  placeholder="Contoh: Jane Smith"
-                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-colors ${errors.fullName ? 'border-red-300 bg-red-50' : 'border-gray-200 focus:border-blue-400'}`}
-                />
-                {errors.fullName && <p className="text-xs text-red-500 mt-1">{errors.fullName}</p>}
-              </div>
+            {isSelf && <p className="mt-1.5 text-xs text-gray-500">You can’t change your own role.</p>}
+          </fieldset>
 
-              {/* Email */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={e => { setFormData(p => ({ ...p, email: e.target.value })); setErrors(p => ({ ...p, email: undefined })) }}
-                  placeholder="email@carterisland.com"
-                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-colors ${errors.email ? 'border-red-300 bg-red-50' : 'border-gray-200 focus:border-blue-400'}`}
-                />
-                {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
-              </div>
+          {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-              {/* No. Telepon + Password */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                    No. Telepon <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    value={formData.phoneNumber}
-                    onChange={e => { setFormData(p => ({ ...p, phoneNumber: e.target.value })); setErrors(p => ({ ...p, phoneNumber: undefined })) }}
-                    placeholder="+62-8xx-xxxx-xxxx"
-                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-colors ${errors.phoneNumber ? 'border-red-300 bg-red-50' : 'border-gray-200 focus:border-blue-400'}`}
-                  />
-                  {errors.phoneNumber && <p className="text-xs text-red-500 mt-1">{errors.phoneNumber}</p>}
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                    Password {mode === 'create' ? <span className="text-red-500">*</span> : <span className="text-gray-400 font-normal text-xs">(opsional)</span>}
-                  </label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={e => { setFormData(p => ({ ...p, password: e.target.value })); setErrors(p => ({ ...p, password: undefined })) }}
-                    placeholder="Min. 8 karakter"
-                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-colors ${errors.password ? 'border-red-300 bg-red-50' : 'border-gray-200 focus:border-blue-400'}`}
-                  />
-                  {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
-                </div>
-              </div>
-
-              {/* Role — toggle pill */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Role <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setFormData(p => ({ ...p, role: 'ADMIN' }))}
-                    className={`px-4 py-3 rounded-xl border-2 text-left transition-all ${formData.role === 'ADMIN' ? 'border-gray-300 bg-white' : 'border-gray-100 bg-gray-50 hover:border-gray-200'}`}
-                  >
-                    <p className={`text-sm font-semibold ${formData.role === 'ADMIN' ? 'text-gray-800' : 'text-gray-500'}`}>Admin</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Akses penuh ke sistem</p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData(p => ({ ...p, role: 'USER' }))}
-                    className={`px-4 py-3 rounded-xl border-2 text-left transition-all ${formData.role === 'USER' ? 'border-blue-400 bg-blue-50' : 'border-gray-100 bg-gray-50 hover:border-gray-200'}`}
-                  >
-                    <p className={`text-sm font-semibold ${formData.role === 'USER' ? 'text-blue-700' : 'text-gray-500'}`}>User</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Akses terbatas (view only)</p>
-                  </button>
-                </div>
-              </div>
-
-              {/* Info */}
-              {mode === 'create' && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-xl text-xs text-blue-600">
-                  <span>ℹ</span>
-                  <span>Password awal akan dikirim ke email pengguna.</span>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  disabled={isLoading}
-                  className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-                >
-                  {isLoading ? (
-                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Menyimpan...</>
-                  ) : (
-                    <>{mode === 'create' ? '✓ Simpan Pengguna' : '✓ Update Pengguna'}</>
-                  )}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {mode === 'view' && (
-            <div className="flex justify-end mt-4">
-              <button onClick={handleClose} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">
-                Tutup
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+          <DialogFooter>
+            <button type="button" onClick={onClose} disabled={saving} className="h-9 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving || phoneInvalid} className="h-9 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-70">
+              {saving ? 'Saving…' : user ? 'Save changes' : 'Add user'}
+            </button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -83,6 +83,8 @@ class User(Base):
     password: Mapped[str] = mapped_column(STR255, nullable=False)
     phone_number: Mapped[str] = mapped_column(STR50, nullable=False)
     role: Mapped[Role] = mapped_column(Enum(Role), nullable=False, default=Role.USER)
+    # True setelah admin membuat/me-reset akun: password sementara wajib diganti saat login
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

@@ -8,6 +8,7 @@ Endpoint:
   POST /api/auth/register → buat user baru
   POST /api/auth/logout   → hapus cookie token
   GET  /api/auth/me       → data user yang sedang login
+  POST /api/auth/change-password → ganti password sendiri (wajib setelah password sementara)
 """
 import logging
 import math
@@ -25,6 +26,7 @@ from core.cuid import generate_cuid
 from core.rate_limit import FailedAttemptLimiter
 from config import JWT_EXPIRE_MINUTES, COOKIE_SECURE
 from core.timeutil import iso_utc
+from core.validation import check_password
 from schemas.auth import LoginRequest, RegisterRequest
 
 logger = logging.getLogger("carter-backend")
@@ -36,6 +38,9 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 LOGIN_WINDOW_SECONDS = 15 * 60
 login_limiter_account = FailedAttemptLimiter(5, LOGIN_WINDOW_SECONDS)   # per email+IP
 login_limiter_ip = FailedAttemptLimiter(20, LOGIN_WINDOW_SECONDS)       # per IP
+# Tebakan password lama di change-password, per akun: tanpa ini sesi yang
+# dicuri bisa menebak password tanpa batas
+change_pw_limiter = FailedAttemptLimiter(5, LOGIN_WINDOW_SECONDS)
 
 
 # ==========================
@@ -51,7 +56,28 @@ def _format_user(user: User) -> dict:
         "role": user.role.value,
         "createdAt": iso_utc(user.created_at),
         "updatedAt": iso_utc(user.updated_at),
+        "mustChangePassword": user.must_change_password,
     }
+
+
+def _issue_token(response: Response, user: User) -> str:
+    """Buat JWT untuk user dan pasang sebagai httpOnly cookie (login & ganti password)."""
+    access_token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role.value,
+        full_name=user.username,
+        must_change_password=user.must_change_password,
+    )
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,       # Tidak bisa diakses JavaScript
+        samesite="lax",      # Proteksi CSRF
+        secure=COOKIE_SECURE,  # env COOKIE_SECURE=true kalau pakai HTTPS
+        max_age=JWT_EXPIRE_MINUTES * 60,  # samakan dengan umur JWT
+    )
+    return access_token
 
 
 # ==========================
@@ -103,36 +129,20 @@ def login(
         login_limiter_ip.record_failure(ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email atau password salah",
+            detail="Incorrect email or password",
         )
 
     # Hitungan per IP sengaja tidak direset: satu akun valid tidak boleh
     # "mencuci" percobaan gagal ke email lain dari IP yang sama.
     login_limiter_account.reset(account_key)
 
-    # Buat JWT token
-    access_token = create_access_token(
-        user_id=user.id,
-        email=user.email,
-        role=user.role.value,
-        full_name=user.username,
-    )
-
-    # Set httpOnly cookie (lebih aman dari localStorage)
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,       # Tidak bisa diakses JavaScript
-        samesite="lax",      # Proteksi CSRF
-        secure=COOKIE_SECURE,  # env COOKIE_SECURE=true kalau pakai HTTPS
-        max_age=JWT_EXPIRE_MINUTES * 60,  # samakan dengan umur JWT
-    )
+    access_token = _issue_token(response, user)
 
     logger.info(f"User login: {user.email} ({user.role.value})")
 
     return {
         "success": True,
-        "message": "Login berhasil",
+        "message": "Signed in",
         "access_token": access_token,
         "token_type": "bearer",
         "user": _format_user(user),
@@ -165,7 +175,7 @@ def register(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email sudah terdaftar",
+            detail="This email is already registered",
         )
 
     # Hash password (kompatibel dengan bcryptjs)
@@ -180,6 +190,7 @@ def register(
         password=hashed_pw,
         phone_number=body.phoneNumber,
         role=Role(body.role),
+        must_change_password=True,  # admin yang memilih password ini
         created_at=now,
         updated_at=now,
     )
@@ -192,7 +203,7 @@ def register(
 
     return {
         "success": True,
-        "message": "Registrasi berhasil",
+        "message": "Account created",
         "user": _format_user(new_user),
     }
 
@@ -209,7 +220,7 @@ async def logout(response: Response):
     response.delete_cookie("access_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
     response.delete_cookie("refresh_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
 
-    return {"success": True, "message": "Logout berhasil"}
+    return {"success": True, "message": "Signed out"}
 
 
 # ==========================
@@ -228,8 +239,64 @@ def get_me(
     """
     user = db.query(User).filter(User.id == current_user["id"]).first()
     if not user:
-        raise HTTPException(status_code=401, detail="User tidak ditemukan")
+        raise HTTPException(status_code=401, detail="This account no longer exists")
     return {
         "success": True,
+        "user": _format_user(user),
+    }
+
+
+# ==========================
+# POST /api/auth/change-password
+# ==========================
+@router.post("/change-password")
+def change_password(
+    body: dict,
+    response: Response,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Ganti password sendiri. Wajib sesudah admin membuat/me-reset akun
+    (must_change_password); selebihnya boleh kapan saja dari menu profil.
+    Token baru dikembalikan + dipasang di cookie (tanda mustChangePassword hilang).
+    """
+    current = body.get("currentPassword")
+    new = body.get("newPassword")
+    if not isinstance(current, str) or not isinstance(new, str):
+        raise HTTPException(status_code=400, detail="Enter your current and new password")
+    try:
+        check_password(new)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    wait = change_pw_limiter.retry_after(current_user["id"])
+    if wait:
+        minutes = math.ceil(wait / 60)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many wrong attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
+            headers={"Retry-After": str(wait)},
+        )
+
+    user = db.query(User).filter(User.id == current_user["id"]).first()
+    if not verify_password(current, user.password):
+        change_pw_limiter.record_failure(current_user["id"])
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    change_pw_limiter.reset(current_user["id"])
+    if current == new:
+        raise HTTPException(status_code=400, detail="Choose a password different from the current one")
+
+    user.password = hash_password(new)
+    user.must_change_password = False
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user)
+
+    logger.info(f"Password changed: {user.email}")
+    return {
+        "success": True,
+        "message": "Password updated",
+        "access_token": _issue_token(response, user),
         "user": _format_user(user),
     }

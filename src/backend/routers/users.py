@@ -4,6 +4,10 @@ Router users — menggantikan:
   - src/app/api/users/[id]/route.ts    (GET, PUT, DELETE by id)
 
 Semua endpoint Admin only via require_admin() dependency.
+
+Password: admin tidak pernah memilih password. Membuat akun / reset menghasilkan
+password sementara acak (dikembalikan SEKALI di response) dan
+must_change_password=True, jadi pengguna wajib menggantinya saat login.
 """
 import logging
 from contextlib import contextmanager, nullcontext
@@ -11,15 +15,15 @@ from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, text
+from sqlalchemy import func, or_, text
 from pydantic import EmailStr, TypeAdapter, ValidationError
 
 from database.connection import get_db
 from database.models import User, Role, MonitoringSession
-from auth.password import hash_password
+from auth.password import hash_password, generate_temporary_password
 from core.dependencies import require_admin
 from core.cuid import generate_cuid
-from core.validation import safe_str, check_password, check_phone
+from core.validation import safe_str, check_phone
 from core.timeutil import iso_utc
 
 logger = logging.getLogger("carter-backend")
@@ -32,36 +36,34 @@ _email_adapter = TypeAdapter(EmailStr)
 # ==========================
 # Helper
 # ==========================
-def _read_user_body(body: dict, default_role: str) -> tuple[str, str, str, str, str]:
+def _read_user_body(body: dict, default_role: str) -> tuple[str, str, str, str]:
     """
-    Ambil & validasi tipe field user dari body mentah → 400 kalau salah.
-    Return (username, email, phone_number, role, password). Password tidak
-    di-strip (di-hash apa adanya); cek panjangnya diserahkan ke caller karena
-    di update password kosong berarti tidak diganti.
+    Ambil & validasi field user dari body mentah → 400 kalau salah.
+    Return (username, email, phone_number, role). Field "password" diabaikan:
+    password hanya lewat password sementara (create/reset) atau change-password.
     """
     try:
         username = safe_str(body.get("fullName"), "fullName")
         email = safe_str(body.get("email"), "email").lower()
         phone_number = safe_str(body.get("phoneNumber"), "phoneNumber")
-        if phone_number:  # kosong dicek caller (wajib diisi)
+        if phone_number:  # kosong ditolak di bawah
             check_phone(phone_number)
-        password = body.get("password") or ""
-        if not isinstance(password, str):
-            raise ValueError("password harus berupa teks")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    if not all([username, email, phone_number]):
+        raise HTTPException(status_code=400, detail="Name, email and phone number are required")
+
     role = body.get("role") or default_role
     if role not in ("USER", "ADMIN"):
-        raise HTTPException(status_code=400, detail="Role harus USER atau ADMIN")
+        raise HTTPException(status_code=400, detail="Role must be USER or ADMIN")
 
-    if email:
-        try:
-            _email_adapter.validate_python(email)
-        except ValidationError:
-            raise HTTPException(status_code=400, detail="Format email tidak valid")
+    try:
+        _email_adapter.validate_python(email)
+    except ValidationError:
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
 
-    return username, email, phone_number, role, password
+    return username, email, phone_number, role
 
 
 @contextmanager
@@ -73,7 +75,7 @@ def _admin_role_lock(db: Session):
     commit/rollback di blok pemanggil.
     """
     if db.execute(text("SELECT GET_LOCK('carter_admin_role', 10)")).scalar() != 1:
-        raise HTTPException(status_code=409, detail="Perubahan role sedang diproses, coba lagi")
+        raise HTTPException(status_code=409, detail="Another role change is in progress, please try again")
     try:
         yield
     finally:
@@ -91,17 +93,17 @@ def _ensure_other_admin(db: Session, user_id: str) -> None:
         db.query(User.id).filter(User.role == Role.ADMIN).with_for_update().all()
     ]
     if not any(uid != user_id for uid in admin_ids):
-        raise HTTPException(status_code=400, detail="Minimal harus ada satu admin")
+        raise HTTPException(status_code=400, detail="There must be at least one admin")
 
 
 def _apply_user_update(db: Session, user: User, username: str, email: str,
-                       phone_number: str, role: str, password: str) -> None:
+                       phone_number: str, role: str) -> None:
     """Terapkan field hasil validasi ke user lalu commit (bagian akhir PUT /api/users/{id})."""
     # Cek email tidak dipakai user lain
     if email != user.email:
         existing = db.query(User).filter(User.email == email).first()
         if existing:
-            raise HTTPException(status_code=400, detail="Email sudah dipakai")
+            raise HTTPException(status_code=400, detail="This email is already used by another account")
 
     user.username = username
     user.email = email
@@ -109,29 +111,31 @@ def _apply_user_update(db: Session, user: User, username: str, email: str,
     user.role = Role(role)
     user.updated_at = datetime.now(timezone.utc)
 
-    if password and password.strip():
-        user.password = hash_password(password)
-
     db.commit()
     db.refresh(user)
 
 
-def _check_password_or_400(password: str) -> None:
-    try:
-        check_password(password)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-def _format_user(user: User) -> dict:
-    return {
+def _format_user(user: User, mission_count: Optional[int] = None) -> dict:
+    data = {
         "id": user.id,
         "fullName": user.username,
         "email": user.email,
         "phoneNumber": user.phone_number,
         "role": user.role.value,
+        "mustChangePassword": user.must_change_password,
         "createdAt": iso_utc(user.created_at),
         "updatedAt": iso_utc(user.updated_at),
     }
+    if mission_count is not None:
+        data["missionCount"] = mission_count  # misi yang dialihkan ke admin kalau user dihapus
+    return data
+
+
+def _get_user_or_404(db: Session, user_id: str) -> User:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
 
 # ==========================
@@ -169,6 +173,9 @@ def get_users(
             )
         )
 
+    # Total sesuai filter, sebelum cursor (dulu: jumlah baris halaman ini saja)
+    total = query.count()
+
     # Cursor pagination
     if cursor:
         if sort_order == "desc":
@@ -188,13 +195,21 @@ def get_users(
     items = users[:valid_limit]
     next_cursor = items[-1].id if has_more and items else None
 
+    # Jumlah misi per user di halaman ini, 1 query
+    missions = dict(
+        db.query(MonitoringSession.user_id, func.count(MonitoringSession.id))
+        .filter(MonitoringSession.user_id.in_([u.id for u in items]))
+        .group_by(MonitoringSession.user_id)
+        .all()
+    ) if items else {}
+
     return {
-        "items": [_format_user(u) for u in items],
+        "items": [_format_user(u, missions.get(u.id, 0)) for u in items],
         "nextCursor": next_cursor,
         "hasMore": has_more,
         "pagination": {
             "limit": valid_limit,
-            "total": len(items),
+            "total": total,
             "sortOrder": sort_order,
             "filters": {"role": role, "search": search},
         },
@@ -214,25 +229,22 @@ def create_user(
     POST create user baru oleh admin.
     Port dari src/app/api/users/route.ts POST
     """
-    username, email, phone_number, role, password = _read_user_body(body, "USER")
-
-    if not all([username, email, password, phone_number]):
-        raise HTTPException(status_code=400, detail="Semua field wajib diisi")
-
-    _check_password_or_400(password)
+    username, email, phone_number, role = _read_user_body(body, "USER")
 
     existing = db.query(User).filter(User.email == email).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Email sudah terdaftar")
+        raise HTTPException(status_code=409, detail="This email is already registered")
 
+    temporary_password = generate_temporary_password()
     now = datetime.now(timezone.utc)
     new_user = User(
         id=generate_cuid(),
         username=username,
         email=email,
-        password=hash_password(password),
+        password=hash_password(temporary_password),
         phone_number=phone_number,
         role=Role(role),
+        must_change_password=True,
         created_at=now,
         updated_at=now,
     )
@@ -241,7 +253,11 @@ def create_user(
     db.refresh(new_user)
 
     logger.info(f"User created: {new_user.email} by admin: {current_user['email']}")
-    return {"message": "User created successfully", "user": _format_user(new_user)}
+    return {
+        "message": "User added",
+        "user": _format_user(new_user),
+        "temporaryPassword": temporary_password,  # satu-satunya kali password ini terlihat
+    }
 
 
 # ==========================
@@ -257,10 +273,7 @@ def get_user(
     GET single user by ID.
     Port dari src/app/api/users/[id]/route.ts GET
     """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User tidak ditemukan")
-    return _format_user(user)
+    return _format_user(_get_user_or_404(db, user_id))
 
 
 # ==========================
@@ -277,35 +290,50 @@ def update_user(
     PUT update user.
     Port dari src/app/api/users/[id]/route.ts PUT
     """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User tidak ditemukan")
-
-    username, email, phone_number, role, password = _read_user_body(body, user.role.value)
-
-    if not all([username, email, phone_number]):
-        raise HTTPException(
-            status_code=400,
-            detail="fullName, email, dan phoneNumber wajib diisi"
-        )
-
-    # Password kosong = tidak diganti
-    if password.strip():
-        _check_password_or_400(password)
+    user = _get_user_or_404(db, user_id)
+    username, email, phone_number, role = _read_user_body(body, user.role.value)
 
     # Role: tidak boleh mengubah role sendiri (seperti larangan hapus akun
     # sendiri) dan tidak boleh sampai tidak ada admin sama sekali.
     demote_admin = role != user.role.value and user.role == Role.ADMIN
     if role != user.role.value and user_id == current_user["id"]:
-        raise HTTPException(status_code=400, detail="Tidak bisa mengubah role akun sendiri")
+        raise HTTPException(status_code=400, detail="You can't change your own role")
 
     with (_admin_role_lock(db) if demote_admin else nullcontext()):
         if demote_admin:
             _ensure_other_admin(db, user_id)
-        _apply_user_update(db, user, username, email, phone_number, role, password)
+        _apply_user_update(db, user, username, email, phone_number, role)
 
     logger.info(f"User updated: {user.id} by admin: {current_user['email']}")
-    return {"message": "User updated successfully", "user": _format_user(user)}
+    return {"message": "Changes saved", "user": _format_user(user)}
+
+
+# ==========================
+# POST /api/users/{id}/reset-password
+# ==========================
+@router.post("/{user_id}/reset-password")
+def reset_password(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_admin),
+):
+    """
+    Pengganti "lupa password" (tidak ada email di jaringan ROV): admin membuat
+    password sementara baru; pengguna wajib menggantinya saat login berikutnya.
+    Akun sendiri lewat change-password, karena admin sudah tahu password-nya.
+    """
+    if user_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Use Change password for your own account")
+    user = _get_user_or_404(db, user_id)
+
+    temporary_password = generate_temporary_password()
+    user.password = hash_password(temporary_password)
+    user.must_change_password = True
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    logger.info(f"Password reset: {user.email} by admin: {current_user['email']}")
+    return {"message": "Password reset", "temporaryPassword": temporary_password}
 
 
 # ==========================
@@ -326,12 +354,10 @@ def delete_user(
     if user_id == current_user["id"]:
         raise HTTPException(
             status_code=400,
-            detail="Tidak bisa menghapus akun sendiri"
+            detail="You can't delete your own account"
         )
 
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    user = _get_user_or_404(db, user_id)
 
     email = user.email
     username = user.username
@@ -350,7 +376,7 @@ def delete_user(
         f"User deleted: {user_id} ({email}) by admin: {current_user['email']}, "
         f"{reassigned} misi dialihkan ke admin tersebut"
     )
-    message = f'User "{username}" berhasil dihapus'
+    message = f'Deleted "{username}"'
     if reassigned:
-        message += f"; {reassigned} misi dialihkan ke akun Anda"
+        message += f"; {reassigned} mission{'s' if reassigned != 1 else ''} moved to your account"
     return {"message": message, "reassignedSessions": reassigned}

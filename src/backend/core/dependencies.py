@@ -79,11 +79,22 @@ def get_current_user(
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token tidak ditemukan. Silakan login terlebih dahulu.",
+            detail="Not signed in. Please sign in first.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return get_user_from_token(token, db)
+    user = get_user_from_token(token, db)
+    # Password sementara dari admin: semua API ditolak sampai pengguna menggantinya
+    if user["must_change_password"] and request.url.path not in PASSWORD_CHANGE_PATHS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please set a new password before continuing.",
+        )
+    return user
+
+
+# Yang masih boleh dipanggil selama password sementara belum diganti
+PASSWORD_CHANGE_PATHS = {"/api/auth/me", "/api/auth/change-password"}
 
 
 def get_user_from_token(token: str, db: Session) -> dict:
@@ -102,7 +113,7 @@ def get_user_from_token(token: str, db: Session) -> dict:
         # 401 (bukan 404) agar frontend mengakhiri sesi user yang sudah dihapus
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User tidak ditemukan",
+            detail="This account no longer exists",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -112,6 +123,7 @@ def get_user_from_token(token: str, db: Session) -> dict:
         "username": user.username,
         "role": user.role.value,
         "phone_number": user.phone_number,
+        "must_change_password": user.must_change_password,
     }
 
 
@@ -131,7 +143,7 @@ def require_admin(
     if current_user["role"] != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Akses ditolak. Hanya admin yang diizinkan.",
+            detail="Only admins can do this.",
         )
     return current_user
 

@@ -83,10 +83,54 @@ def test_malformed_body_is_400(client, admin_h):
                     json={"fullName": 123, "email": "y@tes.com", "phoneNumber": "08123456789",
                           "password": "rahasia88", "role": "USER"})
     assert r.status_code == 400
+
+
+def test_temporary_password_flow(client, admin_h):
+    """Admin membuat akun → password sementara → wajib ganti → reset oleh admin."""
     r = client.post("/api/users", headers=admin_h,
-                    json={"fullName": "Y", "email": "y@tes.com", "phoneNumber": "08123456789",
-                          "password": "pendek", "role": "USER"})
-    assert r.status_code == 400
+                    json={"fullName": "Temp", "email": "temp@tes.com", "phoneNumber": "08123456789",
+                          "password": "dipilih-admin", "role": "USER"})
+    assert r.status_code == 201
+    uid, temp = r.json()["user"]["id"], r.json()["temporaryPassword"]
+    assert r.json()["user"]["mustChangePassword"] is True
+
+    # password kiriman admin diabaikan; password sementara yang berlaku
+    assert client.post("/api/auth/login", json={"email": "temp@tes.com", "password": "dipilih-admin"}).status_code == 401
+    login = client.post("/api/auth/login", json={"email": "temp@tes.com", "password": temp}).json()
+    assert login["user"]["mustChangePassword"] is True
+    h = {"Authorization": f"Bearer {login['access_token']}"}
+
+    # API lain ditolak sampai password diganti; /me tetap boleh
+    assert client.get("/api/sessions", headers=h).status_code == 403
+    assert client.get("/api/auth/me", headers=h).status_code == 200
+
+    change = lambda cur, new: client.post("/api/auth/change-password", headers=h,
+                                          json={"currentPassword": cur, "newPassword": new})
+    assert change("salah-salah", "milikku-123").status_code == 400
+    assert change(temp, "pendek").status_code == 400
+    assert change(temp, temp).status_code == 400
+    r = change(temp, "milikku-123")
+    assert r.status_code == 200 and r.json()["user"]["mustChangePassword"] is False
+    h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    assert client.get("/api/sessions", headers=h).status_code == 200
+
+    # lupa password → admin reset → wajib ganti lagi
+    r = client.post(f"/api/users/{uid}/reset-password", headers=admin_h)
+    assert r.status_code == 200
+    login = client.post("/api/auth/login", json={"email": "temp@tes.com", "password": r.json()["temporaryPassword"]})
+    assert login.status_code == 200 and login.json()["user"]["mustChangePassword"] is True
+
+
+def test_change_password_attempts_limited(client, user_h):
+    body = {"currentPassword": "bukan-ini", "newPassword": "milikku-123"}
+    codes = [client.post("/api/auth/change-password", headers=user_h, json=body).status_code for _ in range(6)]
+    assert codes == [400] * 5 + [429]
+    from routers.auth import change_pw_limiter
+    change_pw_limiter._failures.clear()  # jangan bocor ke tes lain
+
+
+def test_admin_cannot_reset_own_password(client, admin_h, admin):
+    assert client.post(f"/api/users/{admin.id}/reset-password", headers=admin_h).status_code == 400
 
 
 @pytest.mark.parametrize("path", ["/api/detections", "/api/telemetry"])

@@ -24,14 +24,14 @@ def safe_str(value: Any, field_name: str) -> str:
     if value is None:
         return ""
     if not isinstance(value, str):
-        raise ValueError(f"{field_name} harus berupa teks")
+        raise ValueError(f"{field_name} must be text")
     return value.strip()
 
 
 def check_password(password: str) -> str:
     """Raise ValueError kalau password lebih pendek dari PASSWORD_MIN_LENGTH."""
     if len(password) < PASSWORD_MIN_LENGTH:
-        raise ValueError(f"Password minimal {PASSWORD_MIN_LENGTH} karakter")
+        raise ValueError(f"Password must be at least {PASSWORD_MIN_LENGTH} characters")
     return password
 
 
@@ -43,7 +43,7 @@ _PHONE_RE = re.compile(r"(?:0|\+?62)8\d{8,11}")
 def check_phone(phone: str) -> str:
     """Raise ValueError kalau bukan nomor HP Indonesia yang valid."""
     if not _PHONE_RE.fullmatch(re.sub(r"[\s.-]", "", phone)):
-        raise ValueError("Nomor telepon tidak valid (contoh: 08123456789 atau +62 812-3456-789)")
+        raise ValueError("Enter a valid Indonesian mobile number, e.g. 08123456789 or +62 812-3456-789")
     return phone
 
 

@@ -7,6 +7,7 @@ export interface AuthUser {
   fullName: string
   role: 'USER' | 'ADMIN'
   phoneNumber: string
+  mustChangePassword: boolean
 }
 
 export interface AuthSession {
@@ -26,6 +27,7 @@ function decodeJWT(token: string): AuthUser | null {
       fullName: data.fullName || data.full_name || data.email || '',
       role: data.role || 'USER',
       phoneNumber: data.phoneNumber || data.phone_number || '',
+      mustChangePassword: data.mustChangePassword === true,
     }
   } catch {
     return null
@@ -48,6 +50,9 @@ export async function getAuthSession(): Promise<AuthSession | null> {
 export async function requireAuth(): Promise<AuthSession> {
   const session = await getAuthSession()
   if (!session) redirect('/auth/login')
+  // Temporary password from an admin: nothing else opens until the user picks their own
+  // (the API refuses the same requests, see get_current_user in the backend)
+  if (session.user.mustChangePassword) redirect('/auth/set-password')
   return session
 }
 

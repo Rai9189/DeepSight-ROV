@@ -6,12 +6,7 @@ import { useRouter } from 'next/navigation'
 import { LoginData } from '@/types/auth'
 import { Anchor, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { ApiError, authHelper, isApiStatus } from '@/lib/api-client'
-
-// Only same-origin paths — blocks open redirects like //evil.com or /\evil.com
-function safeCallbackUrl(): string {
-  const url = new URLSearchParams(window.location.search).get('callbackUrl')
-  return url && url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/\\') ? url : '/dashboard'
-}
+import { safeCallbackUrl } from '@/lib/safe-callback'
 
 export default function LoginForm() {
   const [formData, setFormData] = useState<LoginData>({ email: '', password: '' })
@@ -29,8 +24,11 @@ export default function LoginForm() {
     setLoading(true)
     setError('')
     try {
-      await authHelper.login(formData.email, formData.password)
-      router.replace(safeCallbackUrl())
+      const user = await authHelper.login(formData.email, formData.password)
+      // A temporary password from an admin must be replaced before anything else
+      router.replace(user.mustChangePassword
+        ? `/auth/set-password?callbackUrl=${encodeURIComponent(safeCallbackUrl())}`
+        : safeCallbackUrl())
     } catch (err: unknown) {
       setError(isApiStatus(err, 401)
         ? 'Invalid email or password'
@@ -87,7 +85,7 @@ export default function LoginForm() {
                 {loading ? 'Signing in…' : 'Sign in'}
               </button>
 
-              <p className="text-center text-sm text-gray-500">Forgot your password? Contact an administrator.</p>
+              <p className="text-center text-sm text-gray-500">Forgot your password? Ask an admin to reset it.</p>
             </form>
           </div>
 

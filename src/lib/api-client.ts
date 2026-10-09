@@ -27,6 +27,7 @@ export interface AuthUser {
   fullName: string
   role: 'USER' | 'ADMIN'
   phoneNumber: string
+  mustChangePassword?: boolean   // signed in with a temporary password from an admin
 }
 
 export interface ApiResponse<T = unknown> {

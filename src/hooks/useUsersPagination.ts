@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
 
 export interface User {
@@ -8,6 +8,8 @@ export interface User {
   email: string
   phoneNumber: string
   role: 'USER' | 'ADMIN'
+  mustChangePassword: boolean
+  missionCount?: number
   createdAt: string
   updatedAt: string
 }
@@ -16,80 +18,71 @@ interface PaginationResponse {
   items: User[]
   nextCursor: string | null
   hasMore: boolean
-  pagination: {
-    limit: number
-    total: number
-    sortOrder: 'asc' | 'desc'
-    filters: { role: string | null; search: string | null }
-  }
+  pagination: { limit: number; total: number }
 }
 
 type SortOrder = 'asc' | 'desc'
 
-export function useUsersPagination(opts?: { enabled?: boolean }) {
-  const enabled = opts?.enabled ?? true
+const PAGE_SIZE = 20
+const SEARCH_DELAY_MS = 300
 
-  const [limit, setLimit] = useState(10)
+export function useUsersPagination() {
   const [role, setRole] = useState('')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sort, setSort] = useState<SortOrder>('desc')
   const [users, setUsers] = useState<User[]>([])
+  const [total, setTotal] = useState(0)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(true)
+  const [hasMore, setHasMore] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Only the newest request may update the list — a slow reply for "ad" must not overwrite "admin"
+  const requestId = useRef(0)
 
-  const params = useMemo(() => ({ limit, role, search, sort }), [limit, role, search, sort])
+  // Wait for a pause in typing before searching
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [search])
 
-  const buildUrl = useCallback((cursor?: string | null) => {
-    const q = new URLSearchParams()
-    if (cursor) q.append('cursor', cursor)
-    q.append('limit', String(limit))
-    if (role) q.append('role', role)
-    if (search) q.append('search', search)
-    q.append('sort', sort)
-    return `/api/users?${q.toString()}`
-  }, [limit, role, search, sort])
-
-  const fetchUsers = useCallback(async (cursor?: string | null, reset = false) => {
-    if (!enabled) return
+  const fetchUsers = useCallback(async (cursor: string | null) => {
+    const id = ++requestId.current
     setIsLoading(true)
     setError(null)
+    const q = new URLSearchParams({ limit: String(PAGE_SIZE), sort })
+    if (cursor) q.set('cursor', cursor)
+    if (role) q.set('role', role)
+    if (debouncedSearch) q.set('search', debouncedSearch)
     try {
-      // PERUBAHAN: pakai apiClient bukan fetch() langsung
-      // apiClient otomatis kirim JWT token ke FastAPI
-      const data = await apiClient.get<PaginationResponse>(buildUrl(cursor))
-      setUsers(prev => reset ? data.items : [...prev, ...data.items])
+      const data = await apiClient.get<PaginationResponse>(`/api/users?${q}`)
+      if (id !== requestId.current) return
+      setUsers(prev => (cursor ? [...prev, ...data.items] : data.items))
+      setTotal(data.pagination.total)
       setNextCursor(data.nextCursor)
       setHasMore(data.hasMore)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error')
+      if (id === requestId.current) setError(e instanceof Error ? e.message : "Couldn't load users")
     } finally {
-      setIsLoading(false)
+      if (id === requestId.current) setIsLoading(false)
     }
-  }, [buildUrl, enabled])
+  }, [role, debouncedSearch, sort])
 
-  const resetAndLoad = useCallback(() => {
-    setUsers([])
-    setNextCursor(null)
-    setHasMore(true)
-    setError(null)
-    fetchUsers(null, true)
-  }, [fetchUsers])
-
-  useEffect(() => { resetAndLoad() }, [resetAndLoad, params])
+  const reload = useCallback(() => fetchUsers(null), [fetchUsers])
+  useEffect(() => { reload() }, [reload])
 
   const loadMore = useCallback(() => {
-    if (nextCursor && hasMore && !isLoading) fetchUsers(nextCursor, false)
+    if (nextCursor && hasMore && !isLoading) fetchUsers(nextCursor)
   }, [nextCursor, hasMore, isLoading, fetchUsers])
 
   const removeFromList = useCallback((id: string) => {
     setUsers(prev => prev.filter(u => u.id !== id))
+    setTotal(t => Math.max(0, t - 1))
   }, [])
 
   return {
-    users, isLoading, error, hasMore, nextCursor,
-    limit, setLimit, role, setRole, search, setSearch, sort, setSort,
-    loadMore, resetAndLoad, removeFromList
+    users, total, isLoading, error, hasMore,
+    role, setRole, search, setSearch, sort, setSort,
+    loadMore, reload, removeFromList,
   }
 }
