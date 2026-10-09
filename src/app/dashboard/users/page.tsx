@@ -59,7 +59,7 @@ export default function UsersPage() {
     <>
       <Header title="Users" subtitle="Manage accounts and roles" />
 
-      <main className="px-6 py-4">
+      <main className="px-4 py-4 lg:px-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
 
           <FiltersBar

@@ -71,12 +71,16 @@ function fillMinutes(series: Array<{ time: string; detections: number }>, startM
   return points
 }
 
-function Stat({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
+// Same scale as the Trends summary: both report pages open with their key figures
+function Stat({ label, value, unit, hint }: { label: string; value: string | number; unit?: string; hint?: string }) {
   return (
     <div>
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-0.5 text-base font-semibold text-gray-900">{value}</p>
-      {hint && <p className="text-xs text-gray-400">{hint}</p>}
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="mt-2 flex items-baseline gap-1">
+        <span className="text-3xl font-semibold tracking-tight text-gray-900">{value}</span>
+        {unit && value !== '—' && <span className="text-sm text-gray-500">{unit}</span>}
+      </p>
+      {hint && <p className="mt-1 text-xs text-gray-400">{hint}</p>}
     </div>
   )
 }
@@ -121,7 +125,7 @@ export default function AnalyticsContent() {
   const router = useRouter()
   const selectedId = useSearchParams().get('session')
 
-  const { data: sessionsData, isLoading: sessionsLoading } = useSWR('/api/analytics/sessions', fetcher, { refreshInterval: 30000 })
+  const { data: sessionsData, error: sessionsError, isLoading: sessionsLoading } = useSWR('/api/analytics/sessions', fetcher, { refreshInterval: 30000 })
   const allSessions: any[] = (sessionsData as any)?.data || []
   const session = allSessions.find(s => s.id === selectedId) ?? allSessions[0]
   const sessionId: string = session?.id ?? ''
@@ -151,11 +155,15 @@ export default function AnalyticsContent() {
   }
 
   if (!session) {
+    // A failed request must not read as "no missions" — the data may well be there
+    const failed = !!sessionsError && !sessionsData
     return (
       <div className={`${card} flex flex-col items-center justify-center p-12 text-center`}>
         <BarChart3 className="mb-3 h-7 w-7 text-gray-300" />
-        <p className="text-base font-semibold text-gray-700">No missions yet</p>
-        <p className="mt-1 text-sm text-gray-500">Analytics appear once the first mission is recorded.</p>
+        <p className="text-base font-semibold text-gray-700">{failed ? "Couldn't load missions" : 'No missions yet'}</p>
+        <p className="mt-1 text-sm text-gray-500">
+          {failed ? 'Check the connection to the server. The page retries automatically.' : 'Reports appear once the first mission is recorded.'}
+        </p>
       </div>
     )
   }
@@ -253,13 +261,13 @@ export default function AnalyticsContent() {
             </Link>
           )}
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-gray-100 pt-4 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-gray-100 pt-4 sm:grid-cols-3 lg:grid-cols-6">
           <Stat label="Fish counted" value={session.totalFish ?? '—'} hint="Most seen at once" />
           <Stat label="Detections" value={detections ? totalDetections.toLocaleString('en-US') : '—'} hint="Boxes across frames" />
           <Stat label="Species" value={detections ? speciesDist.length : '—'} />
           <Stat label="Duration" value={fmtDuration(durationSec * 1000)} />
           <Stat label="Avg confidence" value={avgConfidence > 0 ? `${Math.round(avgConfidence * 100)}%` : '—'} />
-          <Stat label="Max depth" value={maxDepth != null ? `${maxDepth.toFixed(1)} m` : '—'} />
+          <Stat label="Max depth" value={maxDepth != null ? maxDepth.toFixed(1) : '—'} unit="m" />
         </div>
       </div>
 

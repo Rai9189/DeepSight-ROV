@@ -6,7 +6,8 @@ const fontSans = Geist({ subsets: ['latin'], variable: '--font-app-sans' })
 const fontMono = Geist_Mono({ subsets: ['latin'], variable: '--font-app-mono' })
 
 export const metadata = {
-  title: 'Carter Island AUV Dashboard',
+  // Pages set their own title; the tab reads e.g. "Trends · Carter Island AUV"
+  title: { default: 'Carter Island AUV', template: '%s · Carter Island AUV' },
   description: 'Autonomous Underwater Vehicle Control System',
 }
 

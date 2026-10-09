@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import LoginForm from '@/components/auth/LoginForm'
 
 export const metadata = {
-  title: 'Login - Carter Island AUV',
+  title: 'Sign in',
   description: 'Sign in to Carter Island AUV Dashboard System',
 }
 

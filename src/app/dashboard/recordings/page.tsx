@@ -18,6 +18,8 @@ async function getRecordings(token: string) {
   }
 }
 
+export const metadata = { title: 'Recordings' }
+
 export default async function RecordingsPage({ searchParams }: { searchParams: Promise<{ play?: string }> }) {
   const session = await requireAuth()
   const cookieStore = await cookies()

@@ -140,7 +140,7 @@ export default function HistoricalContent() {
   const [customFrom, setCustomFrom] = useState(() => daysAgo(30))
   const [customTo, setCustomTo] = useState(() => localDay(new Date()))
 
-  const { data: sessionsData, isLoading } = useSWR('/api/analytics/sessions', fetcher, { refreshInterval: 60000 })
+  const { data: sessionsData, error: sessionsError, isLoading } = useSWR('/api/analytics/sessions', fetcher, { refreshInterval: 60000 })
   // fish/totalFish default to empty so an older backend without them can't crash the page
   const allMissions: Mission[] = ((sessionsData as any)?.data || []).map((m: Mission) => ({ ...m, fish: m.fish ?? [], totalFish: m.totalFish ?? 0 }))
 
@@ -192,6 +192,9 @@ export default function HistoricalContent() {
     )
   }
 
+  // A failed request must not read as "no missions" — the data may well be there
+  const failed = !!sessionsError && !sessionsData
+
   const inputCls = 'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100'
 
   return (
@@ -223,8 +226,12 @@ export default function HistoricalContent() {
       {missions.length === 0 ? (
         <div className={`${card} flex flex-col items-center justify-center p-12 text-center`}>
           <History className="mb-3 h-7 w-7 text-gray-300" />
-          <p className="text-base font-semibold text-gray-700">{allMissions.length ? 'No missions in this range' : 'No missions yet'}</p>
-          {allMissions.length > 0 ? (
+          <p className="text-base font-semibold text-gray-700">
+            {failed ? "Couldn't load missions" : allMissions.length ? 'No missions in this range' : 'No missions yet'}
+          </p>
+          {failed ? (
+            <p className="mt-1 text-sm text-gray-500">Check the connection to the server. The page retries automatically.</p>
+          ) : allMissions.length > 0 ? (
             <button onClick={() => setPreset('all')} className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-700">Show all missions</button>
           ) : (
             <p className="mt-1 text-sm text-gray-500">Trends appear once missions are recorded.</p>

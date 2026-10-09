@@ -120,6 +120,12 @@ export default function DashboardContent() {
     fetcher,
     { refreshInterval: 5000, revalidateOnFocus: false }
   )
+  // The finished mission's video (a recording is saved when the stream stops)
+  const { data: recordingData } = useSWR(
+    session?.id && !hasRunning ? `/api/recordings?session_id=${session.id}&limit=1` : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  )
   // Whole-mission averages + depth series. The endpoint defaults to the last 24h, so widen the window.
   const { data: summaryData } = useSWR(
     session?.id ? `/api/analytics/telemetry?session_id=${session.id}&hours=876000` : null,
@@ -127,6 +133,7 @@ export default function DashboardContent() {
     { refreshInterval: hasRunning ? 10000 : 0, revalidateOnFocus: false }
   )
   const telemetry = (telemetryData as any)?.data
+  const recording = (recordingData as any)?.data?.[0]
   const summary = (summaryData as any)?.data?.summary
   const depthSeries: Array<{ time: string; value: number }> = (summaryData as any)?.data?.depth ?? []
   const auv = (auvData as any)?.data
@@ -217,8 +224,13 @@ export default function DashboardContent() {
               {agoSec != null ? `Updated ${fmtAgo(agoSec)}` : 'Waiting for data'}
             </span>
           )}
-          <Link href="/dashboard/recordings" className="inline-flex items-center gap-0.5 font-medium text-blue-600 hover:text-blue-700">
-            View recordings <ChevronRight className="h-4 w-4" />
+          {recording && (
+            <Link href={`/dashboard/recordings?play=${recording.id}`} className="inline-flex items-center gap-0.5 font-medium text-blue-600 hover:text-blue-700">
+              Watch recording <ChevronRight className="h-4 w-4" />
+            </Link>
+          )}
+          <Link href={`/dashboard/analytics?session=${session.id}`} className="inline-flex items-center gap-0.5 font-medium text-blue-600 hover:text-blue-700">
+            View report <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
       </div>
