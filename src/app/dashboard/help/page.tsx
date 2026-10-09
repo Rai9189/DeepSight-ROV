@@ -2,6 +2,8 @@ import { requireAuth } from '@/lib/auth-utils'
 import Header from '@/components/layout/Header'
 import HelpContent from '@/components/help/HelpContent'
 
+export const metadata = { title: 'Help' }
+
 export default async function HelpPage() {
   await requireAuth()
 
@@ -9,9 +11,9 @@ export default async function HelpPage() {
     <>
       <Header
         title="Help"
-        subtitle="Guides and documentation"
+        subtitle="How to run a mission and read the results"
       />
-      <main className="p-0 lg:px-4 mt-4">
+      <main className="px-4 py-4 lg:px-6">
         <HelpContent />
       </main>
     </>

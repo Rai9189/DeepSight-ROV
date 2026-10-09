@@ -1,331 +1,211 @@
 'use client'
 
-import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  HelpCircle, Info, Clock, Mail, ChevronDown, ChevronUp,
-  Wifi, Fish, Video, BarChart2, Map, Settings
-} from 'lucide-react'
+import useSWR from 'swr'
+import { ChevronRight, ExternalLink } from 'lucide-react'
+import { apiClient } from '@/lib/api-client'
+import { TARGET_SPECIES } from '@/lib/species'
+import { WATER_RANGES } from '@/lib/water-quality'
 
-// ── FAQ Data ──
-const FAQ_ITEMS = [
+const card = 'bg-white rounded-2xl border border-gray-100 shadow-sm'
+const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+const listOf = (xs: string[]) => `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`
+
+const STEPS = [
+  { title: 'Start stream', text: 'On Live Stream. A mission is created straight away.' },
+  { title: 'Mission runs', text: 'Video is recorded and fish and sensor data are saved automatically.' },
+  { title: 'Stop', text: 'Ends the stream and the recording. The mission clock stops.' },
+  { title: 'Save mission', text: 'Give it a name and location. It then shows up in Mission Report and Trends.' },
+]
+
+const FAQ: Array<{ group: string; items: Array<{ q: string; a: string }> }> = [
   {
-    category: 'Sesi Misi',
-    icon: Map,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
-    questions: [
+    group: 'Live Stream',
+    items: [
       {
-        q: 'Bagaimana cara memulai sesi misi?',
-        a: 'Buka halaman Live Stream, klik tombol "Mulai Sesi Misi" di bagian atas, masukkan nama lokasi survei, lalu klik "Mulai". Sesi akan otomatis dicatat dengan waktu mulai dan semua data (deteksi, telemetri, recording) akan terhubung ke sesi tersebut.',
+        q: 'Nothing appears after I press Start stream',
+        a: 'The detection feed needs the ROV camera. If “No video received” shows after 10 seconds, check that the ROV is on the same network and that MediaMTX is running, then press Stop and Start stream again. To test without the ROV, choose “This device” as the source in Stream settings.',
       },
       {
-        q: 'Apa yang terjadi jika sesi tidak diselesaikan?',
-        a: 'Sesi yang masih berstatus "Running" akan tetap aktif hingga operator secara manual menyelesaikannya (Completed) atau membatalkannya (Aborted). Data tetap tersimpan. Disarankan selalu menyelesaikan sesi setelah misi selesai.',
+        q: 'Is the mission video recorded?',
+        a: 'Yes. Recording starts on its own a few seconds after the stream starts and ends when you press Stop. The video appears in Recordings, and the mission’s report links to it with “Watch recording”.',
       },
       {
-        q: 'Bisakah ada lebih dari satu sesi aktif sekaligus?',
-        a: 'Tidak. Sistem hanya mengizinkan satu sesi berstatus Running pada satu waktu. Selesaikan sesi yang berjalan sebelum memulai sesi baru.',
+        q: 'Why are some fish not detected?',
+        a: 'The AI only keeps a detection when it is at least as confident as the threshold shown under System. Murky water, poor light and fish far from the camera lower its confidence.',
       },
     ],
   },
   {
-    category: 'Live Stream',
-    icon: Video,
-    color: 'text-red-600',
-    bg: 'bg-red-50',
-    questions: [
+    group: 'Missions',
+    items: [
       {
-        q: 'Mengapa video preview tidak muncul?',
-        a: 'Pastikan ROV dan Raspberry Pi sudah terhubung ke jaringan yang sama dengan Base Station. Preview kiri menggunakan MediaMTX di alamat 192.168.2.2:8889. Pastikan alamat tersebut dapat diakses dari browser.',
+        q: 'Why do I name the mission after pressing Stop?',
+        a: 'The mission is created the moment the stream starts, so no data is lost while you type. The save dialog can’t be skipped: the mission stays Running until it is saved.',
       },
       {
-        q: 'Apa perbedaan panel kiri dan panel kanan?',
-        a: 'Panel kiri adalah preview langsung dari kamera via MediaMTX (RTSP). Panel kanan adalah hasil deteksi YOLO yang diproses backend dan dikirim via WebRTC — menampilkan bounding box di sekitar ikan yang terdeteksi.',
+        q: 'Why was my mission marked Aborted?',
+        a: 'A mission that has had no stream for 10 minutes, or that is still running when the server restarts, is closed as Aborted. Its data is kept and still appears in Mission Report and Trends.',
       },
       {
-        q: 'Kapan tombol Record bisa digunakan?',
-        a: 'Tombol Record hanya muncul setelah streaming aktif (Start Stream berhasil). Klik Record untuk mulai merekam, dan Stop Recording untuk mengakhiri. File video otomatis tersimpan dan bisa dilihat di halaman Recordings.',
+        q: 'Can two missions run at the same time?',
+        a: 'No. Only one mission can be Running. Stop and save the current one before starting another.',
       },
     ],
   },
   {
-    category: 'Deteksi Ikan',
-    icon: Fish,
-    color: 'text-teal-600',
-    bg: 'bg-teal-50',
-    questions: [
+    group: 'Fish detection',
+    items: [
       {
-        q: 'Spesies apa saja yang bisa dideteksi?',
-        a: 'Model YOLOv8 yang digunakan (16sept.pt) dilatih untuk mendeteksi spesies ikan karang di perairan Carter Island. Daftar spesies tersedia di panel AI Species Counter saat streaming berlangsung.',
+        q: 'Which species are detected?',
+        a: `Data is organised around four target species: ${listOf(TARGET_SPECIES)}. The current AI model can’t tell species apart yet, so it labels every fish as “ikan” (fish). Species names will appear once the updated model is installed.`,
       },
       {
-        q: 'Mengapa AI Species Counter tidak update?',
-        a: 'Species Counter hanya aktif jika ada sesi misi yang berjalan DAN streaming aktif. Pastikan keduanya sudah dimulai. Counter update setiap 5 detik dari database.',
-      },
-      {
-        q: 'Apakah data deteksi tersimpan otomatis?',
-        a: 'Ya. Setiap deteksi YOLO otomatis disimpan ke database selama variabel SAVE_DETECTIONS_ENABLED=true di konfigurasi backend. Data bisa dilihat di halaman Analytics.',
+        q: 'Why do “Fish counted” and “Detections” differ?',
+        a: 'They measure different things — see Terms. Detections counts every box the AI draws, so one fish seen in many frames is counted many times. Fish counted is the most of each species seen at once, which never counts a fish twice.',
       },
     ],
   },
   {
-    category: 'Analytics & Historical',
-    icon: BarChart2,
-    color: 'text-purple-600',
-    bg: 'bg-purple-50',
-    questions: [
+    group: 'Mission Report & Trends',
+    items: [
       {
-        q: 'Bagaimana cara melihat data per sesi?',
-        a: 'Di halaman Analytics, gunakan dropdown "Semua Sesi" untuk memilih sesi tertentu. Chart akan otomatis memfilter data sesuai sesi yang dipilih. Di halaman Historical, klik baris sesi untuk melihat detailnya.',
+        q: 'Which page should I use?',
+        a: 'Mission Report shows one mission in detail: detections per minute, species, water quality and the full logs. Trends compares missions over a date range. Select a mission in Trends to open its report.',
       },
       {
-        q: 'Bagaimana cara export data ke CSV?',
-        a: 'Di halaman Historical, klik tombol "Export CSV" untuk mengunduh riwayat semua sesi. Untuk mengunduh data deteksi spesifik satu sesi, klik baris sesi lalu klik "Export Deteksi".',
+        q: 'How do I export data to Excel?',
+        a: 'In Mission Report, the Excel buttons on the Detection log and Sensor log download every row of that mission. In Trends, the Excel button downloads one row per mission for the selected range.',
+      },
+      {
+        q: 'Why are some values coloured?',
+        a: 'Amber or red means the value is outside the normal range listed under Terms. TDS has no range yet: the seawater limits are still being set by the team.',
       },
     ],
   },
   {
-    category: 'Koneksi & Sensor',
-    icon: Wifi,
-    color: 'text-indigo-600',
-    bg: 'bg-indigo-50',
-    questions: [
+    group: 'Dashboard',
+    items: [
       {
-        q: 'Data apa saja yang ditampilkan di Dashboard?',
-        a: 'Dashboard menampilkan data kualitas air real-time (pH, TDS, Dissolved Oxygen, suhu) dari sensor ROV, serta data navigasi (roll, pitch, yaw, heading, depth, speed) dari IMU Pixhawk.',
+        q: 'What does the Dashboard show?',
+        a: 'The running mission, live, while one is in progress. Otherwise a summary of the latest mission: average water quality, the dive profile and fish counted.',
       },
       {
-        q: 'Mengapa data Dashboard menampilkan tanda --?',
-        a: 'Tanda -- berarti belum ada data dari sensor. Pastikan ROV terhubung dan ada sesi misi yang aktif agar data telemetri tersimpan ke database.',
+        q: 'What does “No data” mean?',
+        a: 'That sensor sent no readings during the mission. It does not mean the value was zero.',
       },
     ],
   },
 ]
 
-// ── Changelog Data ──
-const CHANGELOG = [
-  {
-    version: 'v5.0.0',
-    date: 'Mei 2026',
-    changes: [
-      'Migrasi dari Next.js API Routes ke FastAPI backend',
-      'Struktur database baru sesuai dokumen C300 — monitoring_sessions sebagai hub utama',
-      'Data telemetri berubah: dari navigasi ROV ke kualitas air (pH, TDS, DO, suhu)',
-      'Tambah tabel fish_counts, video_paths, video_stream',
-      'Session management — mulai/selesaikan sesi misi dari halaman Stream',
-      'AI Species Counter di halaman Stream',
-      'Halaman Historical Data dengan export CSV',
-      'Filter by sesi di halaman Analytics',
-    ],
-  },
-  {
-    version: 'v4.0.0',
-    date: 'Maret 2026',
-    changes: [
-      'Integrasi WebRTC untuk live streaming YOLO detection',
-      'Recording video langsung dari browser',
-      'APScheduler untuk health check otomatis',
-      'JWT authentication menggantikan NextAuth',
-    ],
-  },
-  {
-    version: 'v3.0.0',
-    date: 'Januari 2026',
-    changes: [
-      'Dashboard real-time dengan SWR polling',
-      'Halaman Analytics dengan Recharts',
-      'Manajemen user dengan role ADMIN/USER',
-    ],
-  },
-]
-
-// ── System Info ──
-const SYSTEM_INFO = [
-  { label: 'Versi Sistem',       value: 'v5.0.0' },
-  { label: 'Backend',            value: 'FastAPI + SQLAlchemy' },
-  { label: 'Frontend',           value: 'Next.js 15 + TypeScript' },
-  { label: 'Database',           value: 'MySQL 8.0' },
-  { label: 'Model AI',           value: 'YOLOv8 (16sept.pt)' },
-  { label: 'Streaming Protocol', value: 'WebRTC + MediaMTX (RTSP)' },
-  { label: 'ROV IMU',            value: 'Pixhawk (MAVLink)' },
-  { label: 'IP Raspberry Pi',    value: '192.168.2.2' },
-]
-
-function FAQItem({ question, answer }: { question: string; answer: string }) {
-  const [open, setOpen] = useState(false)
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="border border-gray-100 rounded-xl overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
-      >
-        <span className="text-sm font-medium text-gray-800 pr-4">{question}</span>
-        {open
-          ? <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
-          : <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />}
-      </button>
-      {open && (
-        <div className="px-4 pb-4 pt-1">
-          <p className="text-sm text-gray-600 leading-relaxed">{answer}</p>
-        </div>
-      )}
+    <div className="flex items-baseline justify-between gap-3 py-2 text-sm">
+      <dt className="text-gray-500">{label}</dt>
+      <dd className="min-w-0 truncate text-right font-medium text-gray-900">{children}</dd>
     </div>
   )
 }
 
 export default function HelpContent() {
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  // Live values instead of hard-coded versions; /api/health is public, /api/model-info needs login
+  const { data: health, error: healthError } = useSWR('/api/health', apiClient.swrFetcher, { refreshInterval: 30000 })
+  const { data: model } = useSWR('/api/model-info', apiClient.swrFetcher)
+  const h = health as any
+  const m = model as any
+  const online = !!h && !healthError
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-4 pb-8">
+      {/* Mission steps */}
+      <section className={`${card} p-5`}>
+        <h2 className="text-base font-semibold text-gray-900">Running a mission</h2>
+        <ol className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {STEPS.map((s, i) => (
+            <li key={s.title} className="flex gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700">{i + 1}</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{s.title}</p>
+                <p className="mt-0.5 text-sm text-gray-500">{s.text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
 
-      {/* ── Quick Nav ── */}
-      <div className="flex flex-wrap gap-2">
-        {FAQ_ITEMS.map(({ category, icon: Icon, color, bg }) => (
-          <button
-            key={category}
-            onClick={() => setActiveCategory(
-              activeCategory === category ? null : category
-            )}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-              activeCategory === category
-                ? `${bg} ${color} border-current`
-                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {category}
-          </button>
-        ))}
-      </div>
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        {/* Questions */}
+        <section className={`${card} p-5 lg:col-span-2`}>
+          <h2 className="text-base font-semibold text-gray-900">Questions</h2>
+          <div className="mt-2 space-y-5">
+            {FAQ.map(({ group, items }) => (
+              <div key={group}>
+                <h3 className="text-xs font-medium text-gray-500">{group}</h3>
+                <div className="mt-1 divide-y divide-gray-100">
+                  {items.map(({ q, a }) => (
+                    <details key={q} className="group">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg py-2.5 text-sm font-medium text-gray-900 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 [&::-webkit-details-marker]:hidden">
+                        <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
+                        {q}
+                      </summary>
+                      <p className="pb-3 pl-6 text-sm leading-relaxed text-gray-600">{a}</p>
+                    </details>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* Kiri: FAQ */}
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <HelpCircle className="h-5 w-5 text-blue-500" />
-                Frequently Asked Questions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {FAQ_ITEMS
-                .filter(f => !activeCategory || f.category === activeCategory)
-                .map(({ category, icon: Icon, color, bg, questions }) => (
-                  <div key={category}>
-                    <div className={`flex items-center gap-2 mb-3 px-3 py-1.5 rounded-lg ${bg} w-fit`}>
-                      <Icon className={`h-4 w-4 ${color}`} />
-                      <span className={`text-xs font-semibold uppercase tracking-wide ${color}`}>
-                        {category}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {questions.map(({ q, a }) => (
-                        <FAQItem key={q} question={q} answer={a} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Kanan: Info Sistem + Changelog + Kontak */}
         <div className="space-y-4">
+          {/* System */}
+          <section className={`${card} p-5`}>
+            <h2 className="text-base font-semibold text-gray-900">System</h2>
+            <dl className="mt-2 divide-y divide-gray-100">
+              <Row label="Server">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${online ? 'bg-green-500' : healthError ? 'bg-red-500' : 'bg-gray-300'}`} />
+                  {online ? 'Online' : healthError ? 'Offline' : 'Checking…'}
+                </span>
+              </Row>
+              <Row label="AI model">{m ? (m.model_loaded ? 'Loaded' : 'Not loaded') : '—'}</Row>
+              <Row label="Confidence threshold">{m?.conf_threshold != null ? `${Math.round(m.conf_threshold * 100)}%` : '—'}</Row>
+              {m?.device && <Row label="Device"><span title={String(m.device)}>{String(m.device)}</span></Row>}
+            </dl>
+            <a
+              href={`${backendUrl}/docs`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              API documentation <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </section>
 
-          {/* Info Sistem */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Info className="h-5 w-5 text-indigo-500" />
-                Info Sistem
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {SYSTEM_INFO.map(({ label, value }) => (
-                  <div key={label} className="flex justify-between items-center text-sm py-1.5 border-b border-gray-50 last:border-0">
-                    <span className="text-gray-500">{label}</span>
-                    <span className="font-medium text-gray-800 text-right ml-2">{value}</span>
-                  </div>
-                ))}
+          {/* Terms */}
+          <section className={`${card} p-5`}>
+            <h2 className="text-base font-semibold text-gray-900">Terms</h2>
+            <dl className="mt-3 space-y-3 text-sm">
+              <div>
+                <dt className="font-medium text-gray-900">Fish counted</dt>
+                <dd className="mt-0.5 text-gray-600">The most of each species seen at once in one frame. Never counts a fish twice, but can miss fish that appear one after another.</dd>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Kontak Admin */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Mail className="h-5 w-5 text-green-500" />
-                Kontak & Dukungan
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="p-3 bg-green-50 rounded-xl text-sm">
-                <p className="font-medium text-green-800 mb-1">Tim Pengembang</p>
-                <p className="text-green-700">Carter Island AUV Team</p>
-                <p className="text-green-600 text-xs mt-1">Capstone Project TA 2026</p>
+              <div>
+                <dt className="font-medium text-gray-900">Detections</dt>
+                <dd className="mt-0.5 text-gray-600">Every box the AI draws in every sampled frame. One fish seen in several frames counts several times.</dd>
               </div>
-              <div className="p-3 bg-blue-50 rounded-xl text-sm">
-                <p className="font-medium text-blue-800 mb-1">Email Admin</p>
-                <p className="text-blue-700">admin@carterisland.com</p>
+              <div>
+                <dt className="font-medium text-gray-900">Mission status</dt>
+                <dd className="mt-0.5 text-gray-600">Running while streaming or waiting to be saved; Completed once saved; Aborted when closed automatically.</dd>
               </div>
-              <div className="p-3 bg-gray-50 rounded-xl text-sm">
-                <p className="font-medium text-gray-700 mb-1">API Documentation</p>
-                <a
-                  href="http://localhost:8000/docs"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline text-xs"
-                >
-                  localhost:8000/docs →
-                </a>
+              <div>
+                <dt className="font-medium text-gray-900">Normal ranges</dt>
+                <dd className="mt-0.5 text-gray-600">
+                  pH {WATER_RANGES.ph.text} · dissolved oxygen {WATER_RANGES.do.text} · temperature {WATER_RANGES.temp.text}. TDS: not set yet.
+                </dd>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Changelog */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Clock className="h-5 w-5 text-orange-500" />
-                Changelog
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {CHANGELOG.map(({ version, date, changes }, i) => (
-                  <div key={version} className="relative pl-4 border-l-2 border-gray-100">
-                    <div className="absolute -left-1.5 top-1 w-3 h-3 rounded-full bg-white border-2 border-blue-400" />
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className={`text-sm font-bold ${i === 0 ? 'text-blue-600' : 'text-gray-600'}`}>
-                        {version}
-                      </span>
-                      <span className="text-xs text-gray-400">{date}</span>
-                      {i === 0 && (
-                        <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-medium">
-                          Latest
-                        </span>
-                      )}
-                    </div>
-                    <ul className="space-y-1">
-                      {changes.map(c => (
-                        <li key={c} className="text-xs text-gray-500 flex items-start gap-1.5">
-                          <span className="text-blue-400 mt-0.5 flex-shrink-0">•</span>
-                          {c}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
+            </dl>
+          </section>
         </div>
       </div>
     </div>
