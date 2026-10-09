@@ -71,11 +71,12 @@ function fillMinutes(series: Array<{ time: string; detections: number }>, startM
   return points
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+function Stat({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
     <div>
       <p className="text-xs text-gray-500">{label}</p>
       <p className="mt-0.5 text-base font-semibold text-gray-900">{value}</p>
+      {hint && <p className="text-xs text-gray-400">{hint}</p>}
     </div>
   )
 }
@@ -252,8 +253,9 @@ export default function AnalyticsContent() {
             </Link>
           )}
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-gray-100 pt-4 sm:grid-cols-5">
-          <Stat label="Detections" value={detections ? totalDetections.toLocaleString('en-US') : '—'} />
+        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-gray-100 pt-4 sm:grid-cols-3 lg:grid-cols-6">
+          <Stat label="Fish counted" value={session.totalFish ?? '—'} hint="Most seen at once" />
+          <Stat label="Detections" value={detections ? totalDetections.toLocaleString('en-US') : '—'} hint="Boxes across frames" />
           <Stat label="Species" value={detections ? speciesDist.length : '—'} />
           <Stat label="Duration" value={fmtDuration(durationSec * 1000)} />
           <Stat label="Avg confidence" value={avgConfidence > 0 ? `${Math.round(avgConfidence * 100)}%` : '—'} />
@@ -265,14 +267,14 @@ export default function AnalyticsContent() {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <div className={`${card} p-5 lg:col-span-2`}>
           <h2 className="text-base font-semibold text-gray-900">Detections over time</h2>
-          <p className="text-xs text-gray-500">Fish detected per minute</p>
+          <p className="text-xs text-gray-500">Detections per minute</p>
           {totalDetections > 0 ? (
             <div className="mt-4 h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap={1}>
                   <CartesianGrid vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="t" tickFormatter={t => fmtClock(t)} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} minTickGap={40} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="t" tickFormatter={t => fmtClock(t)} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} minTickGap={40} tickMargin={8} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} tickMargin={8} />
                   <Tooltip
                     cursor={{ fill: '#f3f4f6' }}
                     labelFormatter={t => fmtClock(Number(t))}
@@ -294,7 +296,7 @@ export default function AnalyticsContent() {
           {speciesDist.length > 0 ? (
             <ul className="mt-4 space-y-3">
               {speciesDist.map((sp, i) => {
-                const color = getSpeciesColor(sp.species, i)
+                const color = getSpeciesColor(sp.species)
                 return (
                   <li key={sp.species}>
                     <div className="flex items-baseline justify-between text-sm">
@@ -362,7 +364,7 @@ export default function AnalyticsContent() {
                   <td className={`${td} text-gray-500`}>{fmtClock(r.detectedAt, true)}</td>
                   <td className={td}>
                     <span className="inline-flex items-center gap-2 text-gray-900">
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getSpeciesColor(r.speciesName, i) }} />
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getSpeciesColor(r.speciesName) }} />
                       {r.speciesName}
                     </span>
                   </td>

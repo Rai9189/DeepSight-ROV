@@ -16,12 +16,12 @@ interface SidebarProps {
 type NavItem = { label: string; href: string; icon: LucideIcon }
 
 const MAIN_ITEMS: NavItem[] = [
-  { label: 'Dashboard',   href: '/dashboard',            icon: Home },
-  { label: 'Live Stream', href: '/dashboard/stream',     icon: Radio },
-  { label: 'Recordings',  href: '/dashboard/recordings', icon: Video },
-  { label: 'Analytics',   href: '/dashboard/analytics',  icon: BarChart3 },
-  { label: 'Historical',  href: '/dashboard/historical', icon: History },
-  { label: 'Help',        href: '/dashboard/help',       icon: HelpCircle },
+  { label: 'Dashboard',      href: '/dashboard',            icon: Home },
+  { label: 'Live Stream',    href: '/dashboard/stream',     icon: Radio },
+  { label: 'Recordings',     href: '/dashboard/recordings', icon: Video },
+  { label: 'Mission Report', href: '/dashboard/analytics',  icon: BarChart3 },
+  { label: 'Trends',         href: '/dashboard/historical', icon: History },
+  { label: 'Help',           href: '/dashboard/help',       icon: HelpCircle },
 ]
 const ADMIN_ITEMS: NavItem[] = [{ label: 'Users', href: '/dashboard/users', icon: Users }]
 

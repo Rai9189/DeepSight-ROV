@@ -297,7 +297,8 @@ export default function DashboardContent() {
 
         {/* Species */}
         <div className={`${card} p-5`}>
-          <h2 className="text-base font-semibold text-gray-900">Species</h2>
+          <h2 className="text-base font-semibold text-gray-900">Fish counted</h2>
+          <p className="text-xs text-gray-500">Most seen at once, per species</p>
           {speciesChartData.length > 0 ? (
             <div className="flex flex-col items-center">
               <div className="relative w-full h-52">
@@ -305,7 +306,7 @@ export default function DashboardContent() {
                   <PieChart>
                     <Pie data={speciesChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" startAngle={90} endAngle={-270}>
                       {speciesChartData.map((entry, index) => (
-                        <Cell key={entry.name} fill={getSpeciesColor(entry.name, index)} />
+                        <Cell key={entry.name} fill={getSpeciesColor(entry.name)} />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '12px' }} />
@@ -313,14 +314,14 @@ export default function DashboardContent() {
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-3xl font-semibold tracking-tight text-gray-900">{speciesTotal}</span>
-                  <span className="text-xs text-gray-500">total</span>
+                  <span className="text-xs text-gray-500">fish</span>
                 </div>
               </div>
               <div className="w-full space-y-1.5 mt-2">
                 {speciesChartData.map((entry, index) => (
                   <div key={entry.name} className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: getSpeciesColor(entry.name, index) }} />
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: getSpeciesColor(entry.name) }} />
                       <span className="text-gray-600">{entry.name}</span>
                     </div>
                     <span className="font-medium text-gray-900">{entry.value}</span>
