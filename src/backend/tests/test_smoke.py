@@ -211,6 +211,29 @@ GET_ENDPOINTS = [
 ]
 
 
+def test_telemetry_summary_min_max(client, admin, user_h):
+    from database.connection import SessionLocal
+    db = SessionLocal()
+    s = make_session(db, admin)
+    now = utcnow()
+    db.add_all([
+        Telemetry(session_id=s.id, timestamp=now, depth=1, ph_level=7.0, tds_value=300, dissolved_oxygen=5.7, water_temp=27),
+        Telemetry(session_id=s.id, timestamp=now, depth=2, ph_level=8.0, tds_value=320, dissolved_oxygen=8.5, water_temp=29),
+    ])
+    db.commit()
+    sid = s.id
+    db.close()
+    summ = client.get("/api/analytics/telemetry", params={"session_id": sid}, headers=user_h).json()["data"]["summary"]
+    assert (summ["minDo"], summ["maxDo"], summ["avgDo"]) == (5.7, 8.5, 7.1)
+    assert (summ["minPh"], summ["maxTemp"]) == (7.0, 29.0)
+
+
+def test_detection_bucket(client, user_h):
+    get = lambda b: client.get("/api/analytics/detections", params={"bucket": b}, headers=user_h).status_code
+    assert get("minute") == 200
+    assert get("detik") == 422, "bucket hanya hour/minute"
+
+
 @pytest.mark.parametrize("path", GET_ENDPOINTS)
 def test_no_server_error(client, admin_h, mission, path):
     r = client.get(path.format(sid=mission), headers=admin_h)

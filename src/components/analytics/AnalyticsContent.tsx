@@ -1,126 +1,136 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { toast } from 'sonner'
-import {
-  LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import Link from 'next/link'
+import { BarChart3, Download, Play } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { downloadXlsx } from '@/lib/xlsx-export'
 import { getSpeciesColor } from '@/lib/species'
+import { TONE, WATER_RANGES, getPhStatus, getDoStatus, getTempStatus, type WaterStatus } from '@/lib/water-quality'
+import SensorCard from '@/components/dashboard/SensorCard'
+import { Skeleton } from '@/components/ui/skeleton'
+import MissionPicker from '@/components/analytics/MissionPicker'
 
 const fetcher = apiClient.swrFetcher
 
-function formatDuration(seconds: number): string {
+// Analytics endpoints default to the last 24h; a mission can be older, so widen the window (same as Dashboard)
+const ALL_TIME = 'hours=876000'
+const LOG_ROWS = 20
+const MINUTE = 60_000
+
+const card = 'bg-white rounded-2xl border border-gray-100 shadow-sm'
+
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+const fmtClock = (iso: string | number, seconds = false) =>
+  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', ...(seconds && { second: '2-digit' }) })
+
+function fmtDuration(ms: number) {
+  if (ms <= 0) return '—'
+  const h = Math.floor(ms / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  const s = Math.floor((ms % 60000) / 1000)
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m ${String(s).padStart(2, '0')}s`
+}
+
+// --- Excel export: columns unchanged from the previous version ---
+function fmtDateIso(t: string) {
+  const d = new Date(t)
+  if (isNaN(d.getTime())) return '—'
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function fmtDurationId(seconds: number) {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = Math.floor(seconds % 60)
   return `${h}j ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}d`
 }
+function fmtTimeRangeId(startTime: string, endTime: string | null) {
+  const opts = { hour: '2-digit', minute: '2-digit' } as const
+  const start = new Date(startTime).toLocaleTimeString('id-ID', opts)
+  return endTime ? `${start}-${new Date(endTime).toLocaleTimeString('id-ID', opts)}` : start
+}
+const fmtClockId = (t: string) =>
+  new Date(t).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-function fmtTime(t: string) {
-  return new Date(t).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-}
-
-function fmtDate(t: string) {
-  const d = new Date(t)
-  if (isNaN(d.getTime())) return '—'
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function fmtTimeRange(startTime: string, endTime: string | null): string {
-  const start = new Date(startTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-  if (!endTime) return start
-  const end = new Date(endTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-  return `${start}-${end}`
-}
-
-function getPhColor(ph: number) {
-  if (ph < 6.5) return 'text-red-500'
-  if (ph > 8.5) return 'text-yellow-500'
-  return 'text-gray-800'
-}
-function getTdsColor(tds: number) {
-  if (tds > 300) return 'text-yellow-500'
-  return 'text-gray-800'
-}
-function getDoColor(do_: number) {
-  if (do_ < 6.0) return 'text-red-500'
-  return 'text-gray-800'
-}
-function getTempColor(temp: number) {
-  if (temp < 26 || temp > 30) return 'text-yellow-500'
-  return 'text-gray-800'
-}
-
-function StatusBadge({ value, type }: { value: number; type: 'ph' | 'tds' | 'do' | 'temp' }) {
-  const configs = {
-    ph: { normal: [6.5, 8.5], label: (v: number) => v < 6.5 ? 'Di Bawah Normal' : v > 8.5 ? 'Di Atas Normal' : 'Normal' },
-    tds: { normal: [0, 300], label: (v: number) => v > 300 ? 'Di Atas Normal' : 'Normal' },
-    do: { normal: [6, 8], label: (v: number) => v < 6 ? 'Di Bawah Normal' : v > 8 ? 'Di Atas Normal' : 'Normal' },
-    temp: { normal: [26, 30], label: (v: number) => v < 26 || v > 30 ? 'Di Atas Normal' : 'Normal' },
-  }
-  const cfg = configs[type]
-  const label = cfg.label(value)
-  const isNormal = label === 'Normal'
-  const isBelow = label === 'Di Bawah Normal'
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded font-medium ${isNormal ? 'bg-green-100 text-green-700' : isBelow ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-700'}`}>
-      {!isNormal && <span className="mr-0.5">{isBelow ? '▼' : '▲'}</span>}{label}
-    </span>
-  )
-}
-
-// Ambil semua baris sesi untuk export — tabel di layar hanya memuat 20 baris terbaru
+// The on-screen logs only hold the latest rows — fetch the whole session for export
 async function fetchAllRows(endpoint: string, total: number): Promise<any[]> {
   const res = await apiClient.get<any>(`${endpoint}&limit=${Math.max(total, 1)}`)
   return res?.data || []
 }
 
+// Minutes without detections are missing from the API; fill them with 0 so the line doesn't bridge gaps
+function fillMinutes(series: Array<{ time: string; detections: number }>, startMs: number, endMs: number) {
+  const counts = new Map(series.map(p => [new Date(p.time).getTime(), p.detections]))
+  const first = Math.floor(startMs / MINUTE) * MINUTE
+  const points: Array<{ t: number; detections: number }> = []
+  for (let t = first; t <= endMs; t += MINUTE) points.push({ t, detections: counts.get(t) ?? 0 })
+  return points
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-0.5 text-base font-semibold text-gray-900">{value}</p>
+    </div>
+  )
+}
+
+// Out-of-range readings get the status colour; normal ones stay plain
+function Reading({ value, digits, status }: { value: number | null | undefined; digits: number; status?: (v: number) => WaterStatus }) {
+  if (value == null) return <span className="text-gray-300">—</span>
+  const tone = status?.(value).tone
+  return <span className={tone && tone !== 'ok' ? `font-medium ${TONE[tone].text}` : 'text-gray-700'}>{value.toFixed(digits)}</span>
+}
+
+function LogCard({ title, shown, total, onDownload, footer, children }: {
+  title: string; shown: number; total: number; onDownload: () => void; footer?: React.ReactNode; children: React.ReactNode
+}) {
+  return (
+    <div className={`${card} flex flex-col overflow-hidden`}>
+      <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+          <span className="text-xs text-gray-500">{total > shown ? `Latest ${shown} of ${total.toLocaleString('en-US')}` : `${total} rows`}</span>
+        </div>
+        <button
+          onClick={onDownload}
+          disabled={total === 0}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+        >
+          <Download className="h-3.5 w-3.5" /> Excel
+        </button>
+      </div>
+      {/* ~10 rows visible; the header row stays pinned while scrolling */}
+      <div className="max-h-[27rem] flex-1 overflow-auto">{children}</div>
+      {footer}
+    </div>
+  )
+}
+
+const th = 'px-2 sm:px-4 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap'
+const td = 'px-2 sm:px-4 py-2.5 text-center whitespace-nowrap'
+
 export default function AnalyticsContent() {
-  const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0])
-  const [selectedSessionId, setSelectedSessionId] = useState('')
+  // Selected mission lives in the URL (?session=…) so refresh, back and shared links keep it
+  const router = useRouter()
+  const selectedId = useSearchParams().get('session')
 
-  // Fetch semua sessions, filter by date di client
-  const { data: sessionsData } = useSWR('/api/analytics/sessions', fetcher, { refreshInterval: 30000 })
+  const { data: sessionsData, isLoading: sessionsLoading } = useSWR('/api/analytics/sessions', fetcher, { refreshInterval: 30000 })
   const allSessions: any[] = (sessionsData as any)?.data || []
+  const session = allSessions.find(s => s.id === selectedId) ?? allSessions[0]
+  const sessionId: string = session?.id ?? ''
 
-  // Filter sessions by date (toleransi ±1 hari untuk timezone)
-  const sessions: any[] = allSessions.filter((s: any) => {
-    if (!dateFilter) return true
-    const sessionDate = new Date(s.startTime).toLocaleDateString('sv-SE') // YYYY-MM-DD
-    return sessionDate === dateFilter
-  })
-
-  // Auto-select: prioritas sessions (filtered by date), fallback ke session terbaru
-  const availableSessions = sessions.length > 0 ? sessions : allSessions.slice(0, 1)
-  const sessionId = selectedSessionId || availableSessions[0]?.id || ''
-  const activeSession = availableSessions.find((s: any) => s.id === sessionId) || availableSessions[0]
-
-  // Fetch analytics
-  const { data: detectionData, isLoading: detectionLoading } = useSWR(
-    sessionId ? `/api/analytics/detections?hours=9999&session_id=${sessionId}` : null,
-    fetcher, { refreshInterval: 30000 }
-  )
-  const { data: telemetryData, isLoading: telemetryLoading } = useSWR(
-    sessionId ? `/api/analytics/telemetry?hours=9999&session_id=${sessionId}` : null,
-    fetcher, { refreshInterval: 30000 }
-  )
-  const { data: detectionListData } = useSWR(
-    sessionId ? `/api/detections?session_id=${sessionId}&limit=20` : null,
-    fetcher, { refreshInterval: 30000 }
-  )
-  const { data: telemetryListData } = useSWR(
-    sessionId ? `/api/telemetry?session_id=${sessionId}&limit=20` : null,
-    fetcher, { refreshInterval: 30000 }
-  )
-
-  const isAnalyticsLoading = sessionId ? (detectionLoading || telemetryLoading) : false
+  const q = `session_id=${sessionId}`
+  const { data: detectionData } = useSWR(sessionId ? `/api/analytics/detections?${q}&${ALL_TIME}&bucket=minute` : null, fetcher, { refreshInterval: 30000 })
+  const { data: telemetryData } = useSWR(sessionId ? `/api/analytics/telemetry?${q}&${ALL_TIME}` : null, fetcher, { refreshInterval: 30000 })
+  const { data: detectionListData } = useSWR(sessionId ? `/api/detections?${q}&limit=${LOG_ROWS}` : null, fetcher, { refreshInterval: 30000 })
+  const { data: telemetryListData } = useSWR(sessionId ? `/api/telemetry?${q}&limit=${LOG_ROWS}` : null, fetcher, { refreshInterval: 30000 })
+  const { data: recordingData } = useSWR(sessionId ? `/api/recordings?${q}&limit=1` : null, fetcher)
 
   const detections = (detectionData as any)?.data
   const telemetry = (telemetryData as any)?.data
@@ -128,420 +138,278 @@ export default function AnalyticsContent() {
   const telemetryList: any[] = (telemetryListData as any)?.data || []
   const detectionTotal: number = (detectionListData as any)?.pagination?.total ?? detectionList.length
   const telemetryTotal: number = (telemetryListData as any)?.pagination?.total ?? telemetryList.length
+  // ponytail: links the newest recording only; a mission with several recordings shows the rest in Recordings
+  const recording = (recordingData as any)?.data?.[0]
 
-  const totalDetections = detections?.summary?.totalDetections ?? 0
-  const uniqueSpecies = detections?.summary?.uniqueSpecies ?? 0
-  const avgConfidence = detections?.summary?.avgConfidence ?? 0
-  const speciesDist: any[] = detections?.speciesDistribution || []
-  const speciesTotal = speciesDist.reduce((s: number, c: any) => s + c.count, 0)
-  const timeSeries: any[] = detections?.timeSeries || []
+  if (sessionsLoading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-500">
+        <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    )
+  }
 
-  const avgPh = telemetry?.summary?.avgPh ?? 0
-  const avgTds = telemetry?.summary?.avgTds ?? 0
-  const avgDo = telemetry?.summary?.avgDo ?? 0
-  const avgTemp = telemetry?.summary?.avgTemp ?? 0
+  if (!session) {
+    return (
+      <div className={`${card} flex flex-col items-center justify-center p-12 text-center`}>
+        <BarChart3 className="mb-3 h-7 w-7 text-gray-300" />
+        <p className="text-base font-semibold text-gray-700">No missions yet</p>
+        <p className="mt-1 text-sm text-gray-500">Analytics appear once the first mission is recorded.</p>
+      </div>
+    )
+  }
 
-  // Session duration in seconds
-  const sessionDuration = activeSession?.endTime && activeSession?.startTime
-    ? Math.floor((new Date(activeSession.endTime).getTime() - new Date(activeSession.startTime).getTime()) / 1000)
-    : 0
+  const isLive = session.status === 'Running'
+  const startMs = new Date(session.startTime).getTime()
+  const endMs = session.endTime ? new Date(session.endTime).getTime() : Date.now()
+  const durationSec = Math.floor((endMs - startMs) / 1000)
 
-  const missionName = activeSession?.locationName ?? '—'
-  const sessionLabel = `session_${(sessionId || '').slice(-3)}`
+  const totalDetections: number = detections?.summary?.totalDetections ?? 0
+  const avgConfidence: number = detections?.summary?.avgConfidence ?? 0
+  const speciesDist: Array<{ species: string; count: number }> = detections?.speciesDistribution || []
+  const speciesMax = speciesDist[0]?.count ?? 0
+  // ponytail: one point per minute; a mission of many hours makes a dense but still readable line
+  const chartData = detections ? fillMinutes(detections.timeSeries || [], startMs, endMs) : []
+
+  const hasTelemetry = (telemetry?.summary?.dataPoints ?? 0) > 0
+  const s = telemetry?.summary
+  // Min/max only when the API sent them (older backends don't)
+  const rangeOf = (k: 'Ph' | 'Tds' | 'Do' | 'Temp') =>
+    hasTelemetry && s[`min${k}`] != null && s[`max${k}`] != null ? { min: s[`min${k}`], max: s[`max${k}`] } : undefined
+  const depths: number[] = (telemetry?.depth ?? []).map((d: any) => d.value)
+  // ponytail: series points are bucket averages for long missions, so max depth is slightly under the true peak
+  const maxDepth = depths.length ? Math.max(...depths) : null
+
+  // Excel only — kept identical to the previous export
+  const sessionLabel = `session_${sessionId.slice(-3)}`
+  const xlsMissionTime = fmtTimeRangeId(session.startTime, session.endTime ?? null)
+  const xlsDuration = session.endTime && durationSec > 0 ? fmtDurationId(durationSec) : '—'
+
+  const downloadDetections = async () => {
+    try {
+      const rows = await fetchAllRows(`/api/detections?${q}`, detectionTotal)
+      await downloadXlsx(
+        `detection-log-${sessionLabel}.xlsx`,
+        ['TANGGAL', 'WAKTU MISI', 'SESSION ID', 'DURASI MISI', 'WAKTU DETEKSI', 'SPESIES', 'CONFIDENCE', 'KEDALAMAN (m)'],
+        rows.map((r: any) => [
+          fmtDateIso(r.detectedAt), xlsMissionTime, sessionLabel, xlsDuration, fmtClockId(r.detectedAt),
+          r.speciesName, { value: r.confidence, format: '0%' }, r.depthAtDetection ?? null,
+        ])
+      )
+    } catch {
+      toast.error("Couldn't download the detection log")
+    }
+  }
+
+  const downloadTelemetry = async () => {
+    try {
+      const rows = await fetchAllRows(`/api/telemetry?${q}`, telemetryTotal)
+      await downloadXlsx(
+        `telemetry-log-${sessionLabel}.xlsx`,
+        ['TANGGAL', 'WAKTU MISI', 'SESSION ID', 'DURASI MISI', 'WAKTU SENSOR', 'PH', 'SUHU (C)', 'TDS (ppm)', 'DO (mg/L)'],
+        rows.map((r: any) => [
+          fmtDateIso(r.timestamp), xlsMissionTime, sessionLabel, xlsDuration, fmtClockId(r.timestamp),
+          r.phLevel, r.waterTemp, r.tdsValue, r.dissolvedOxygen,
+        ])
+      )
+    } catch {
+      toast.error("Couldn't download the sensor log")
+    }
+  }
 
   return (
-    <div className="px-6 py-4 space-y-4">
+    <div className="space-y-4">
+      <MissionPicker
+        missions={allSessions}
+        selected={session}
+        onSelect={id => router.replace(`?session=${id}`, { scroll: false })}
+      />
 
-      {/* ── Filter: Tanggal + Misi ── */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Tanggal:</span>
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={e => { setDateFilter(e.target.value); setSelectedSessionId('') }}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-blue-400"
-            />
+      {/* Mission header */}
+      <div className={`${card} px-5 py-4`}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="truncate text-lg font-semibold tracking-tight text-gray-900">{session.locationName || 'Untitled mission'}</h2>
+              {isLive ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 motion-safe:animate-pulse" /> LIVE
+                </span>
+              ) : (
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">{session.status}</span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-gray-500">
+              {fmtDate(session.startTime)} · {fmtClock(session.startTime)}{session.endTime ? ` – ${fmtClock(session.endTime)}` : ' – now'}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Misi:</span>
-            <select
-              value={sessionId}
-              onChange={e => setSelectedSessionId(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-blue-400"
+          {recording && (
+            <Link
+              href={`/dashboard/recordings?play=${recording.id}`}
+              className="inline-flex shrink-0 self-start items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
             >
-              {availableSessions.length === 0 && <option value="">Tidak ada misi</option>}
-              {availableSessions.map((s: any) => (
-                <option key={s.id} value={s.id}>{s.locationName}</option>
-              ))}
-            </select>
-          </div>
+              <Play className="h-3.5 w-3.5" /> Watch recording
+            </Link>
+          )}
         </div>
-        {sessionId && (
-          <span className="text-xs font-mono text-gray-400 border border-gray-200 px-3 py-1.5 rounded-lg bg-gray-50">
-            id_session: {sessionLabel}
-          </span>
-        )}
+        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-gray-100 pt-4 sm:grid-cols-5">
+          <Stat label="Detections" value={detections ? totalDetections.toLocaleString('en-US') : '—'} />
+          <Stat label="Species" value={detections ? speciesDist.length : '—'} />
+          <Stat label="Duration" value={fmtDuration(durationSec * 1000)} />
+          <Stat label="Avg confidence" value={avgConfidence > 0 ? `${Math.round(avgConfidence * 100)}%` : '—'} />
+          <Stat label="Max depth" value={maxDepth != null ? `${maxDepth.toFixed(1)} m` : '—'} />
+        </div>
       </div>
 
-      {!sessionId ? (
-        <div className="flex flex-col items-center justify-center h-60 text-gray-300">
-          <div className="w-16 h-16 rounded-full border-4 border-dashed border-gray-200 flex items-center justify-center mb-3">
-            <span className="text-2xl">📊</span>
-          </div>
-          <p className="text-sm text-gray-400">Pilih tanggal dan misi untuk melihat analytics</p>
-        </div>
-      ) : (
-        <>
-          {/* Loading indicator saat ganti sesi */}
-          {isAnalyticsLoading && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-500">
-              <div className="w-3 h-3 border-2 border-blue-300 border-t-blue-500 rounded-full animate-spin" />
-              Memuat data analytics...
-            </div>
-          )}
-
-          {/* ── Row 1: Summary Cards ── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              {
-                label: 'Total Deteksi Ikan',
-                value: totalDetections,
-                sub: 'Sesi ini',
-                icon: '🐟',
-                iconBg: 'bg-blue-50',
-              },
-              {
-                label: 'Total Spesies',
-                value: uniqueSpecies,
-                sub: speciesDist.map((s: any) => s.species).join(', ') || '—',
-                icon: '📊',
-                iconBg: 'bg-green-50',
-              },
-              {
-                label: 'Durasi Misi',
-                value: sessionDuration > 0 ? formatDuration(sessionDuration) : '—',
-                sub: 'Total waktu misi berlangsung',
-                icon: '⏱',
-                iconBg: 'bg-yellow-50',
-              },
-              {
-                label: 'Avg Confidence AI',
-                value: avgConfidence > 0 ? `${(avgConfidence * 100).toFixed(0)}%` : '—',
-                sub: 'AI detection',
-                icon: '🎯',
-                iconBg: 'bg-purple-50',
-              },
-            ].map(({ label, value, sub, icon, iconBg }) => (
-              <div key={label} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 flex items-start justify-between">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">{label}</p>
-                  <p className="text-2xl font-bold text-gray-800 leading-tight">{value}</p>
-                  <p className="text-xs text-gray-400 mt-1 truncate max-w-[160px]">{sub}</p>
-                </div>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${iconBg}`}>
-                  {icon}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* ── Row 2: Species count per spesies ── */}
-          {speciesDist.length > 0 && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {speciesDist.slice(0, 4).map((s: any, i: number) => {
-                const pct = speciesTotal > 0 ? ((s.count / speciesTotal) * 100).toFixed(1) : '0'
-                const color = getSpeciesColor(s.species, i)
-                return (
-                  <div key={s.species} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
-                    <p className="text-3xl font-bold mb-1" style={{ color }}>{s.count}</p>
-                    <p className="text-sm text-gray-600 font-medium">{s.species}</p>
-                    <p className="text-xs mt-1 mb-2" style={{ color }}>{pct}%</p>
-                    <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* ── Row 3: Line chart + Donut ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            {/* Fish Detections Over Time */}
-            <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-gray-700">Fish Detections Over Time</h3>
-                <span className="text-xs text-gray-400 border border-gray-200 px-2 py-0.5 rounded-lg">24h</span>
-              </div>
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart data={timeSeries}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                  <XAxis dataKey="time" tickFormatter={fmtTime} tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip labelFormatter={t => fmtTime(String(t))} />
-                  <Line type="monotone" dataKey="detections" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} name="Deteksi" />
-                </LineChart>
+      {/* Detections over time + species ranking */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <div className={`${card} p-5 lg:col-span-2`}>
+          <h2 className="text-base font-semibold text-gray-900">Detections over time</h2>
+          <p className="text-xs text-gray-500">Fish detected per minute</p>
+          {totalDetections > 0 ? (
+            <div className="mt-4 h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap={1}>
+                  <CartesianGrid vertical={false} stroke="#f3f4f6" />
+                  <XAxis dataKey="t" tickFormatter={t => fmtClock(t)} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} minTickGap={40} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    cursor={{ fill: '#f3f4f6' }}
+                    labelFormatter={t => fmtClock(Number(t))}
+                    formatter={v => [v, 'Detections']}
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  />
+                  <Bar dataKey="detections" fill="#2563eb" radius={[2, 2, 0, 0]} maxBarSize={24} isAnimationActive={false} />
+                </BarChart>
               </ResponsiveContainer>
             </div>
-
-            {/* Species Distribution Donut */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-gray-700">Species Distribution</h3>
-                <span className="text-xs text-gray-400 border border-gray-200 px-2 py-0.5 rounded-lg">Pie</span>
-              </div>
-              {speciesDist.length > 0 ? (
-                <div className="flex flex-col items-center">
-                  <div className="relative w-full h-36">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={speciesDist} dataKey="count" nameKey="species" cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={2}>
-                          {speciesDist.map((s: any, i: number) => (
-                            <Cell key={s.species} fill={getSpeciesColor(s.species, i)} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-2xl font-bold text-gray-800">{speciesTotal}</span>
-                      <span className="text-xs text-gray-400">Total</span>
-                    </div>
-                  </div>
-                  <div className="w-full space-y-1 mt-2">
-                    {speciesDist.map((s: any, i: number) => (
-                      <div key={s.species} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getSpeciesColor(s.species, i) }} />
-                          <span className="text-gray-500">{s.species}</span>
-                        </div>
-                        <span className="text-gray-600 font-medium">{s.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-36 text-gray-300 text-sm">Belum ada data</div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Deskripsi Misi ── */}
-          {activeSession && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Deskripsi Misi</h3>
-              <p className="text-sm text-gray-600">
-                {activeSession.locationName} &nbsp;·&nbsp; {fmtDate(activeSession.startTime)},&nbsp;
-                {fmtTimeRange(activeSession.startTime, activeSession.endTime)}
-                {sessionDuration > 0 && <> &nbsp;·&nbsp; Durasi: {formatDuration(sessionDuration)}</>}
-                {activeSession.locationName && <> &nbsp;·&nbsp; Lokasi: {activeSession.locationName}</>}
-              </p>
-              {(avgPh > 0 || avgTds > 0) && (
-                <p className="text-xs text-gray-400 mt-1">
-                  Kondisi perairan saat misi: TDS {avgTds > 300 ? 'tinggi' : 'normal'} ({avgTds} ppm),
-                  DO {avgDo < 6 ? 'rendah' : 'normal'} ({avgDo} mg/L),
-                  pH {avgPh < 6.5 ? 'rendah' : avgPh > 8.5 ? 'tinggi' : 'normal'} ({avgPh}),
-                  Suhu {avgTemp < 26 || avgTemp > 30 ? 'perhatian' : 'normal'} ({avgTemp}°C)
-                </p>
-              )}
-            </div>
+          ) : (
+            <p className="flex h-48 items-center justify-center text-sm text-gray-400">{detections ? 'No fish detected in this mission' : 'Loading…'}</p>
           )}
+        </div>
 
-          {/* ── Rata-rata Kualitas Air ── */}
-          {(avgPh > 0 || avgTds > 0 || avgDo > 0 || avgTemp > 0) && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700">
-                    💧 Rata-rata Kualitas Air — Misi {missionName}, {fmtDate(activeSession?.startTime ?? '')}
-                  </h3>
-                </div>
-                <p className="text-xs text-gray-400">Nilai berikut merupakan rata-rata sensor selama sesi berlang</p>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: 'pH Air', value: avgPh, unit: 'pH', type: 'ph' as const },
-                  { label: 'TDS', value: avgTds, unit: 'ppm', type: 'tds' as const },
-                  { label: 'DO (Dissolved O₂)', value: avgDo, unit: 'mg/L', type: 'do' as const },
-                  { label: 'Suhu Air', value: avgTemp, unit: '°C', type: 'temp' as const },
-                ].map(({ label, value, unit, type }) => (
-                  <div key={label} className="border border-gray-100 rounded-xl p-4">
-                    <p className="text-xs text-gray-400 mb-1">{label}</p>
-                    <div className="flex items-baseline gap-1 mb-2">
-                      <span className={`text-3xl font-bold ${type === 'ph' ? getPhColor(value) : type === 'tds' ? getTdsColor(value) : type === 'do' ? getDoColor(value) : getTempColor(value)}`}>
-                        {value.toFixed(1)}
+        <div className={`${card} p-5`}>
+          <h2 className="text-base font-semibold text-gray-900">Species</h2>
+          <p className="text-xs text-gray-500">Ranked by detections</p>
+          {speciesDist.length > 0 ? (
+            <ul className="mt-4 space-y-3">
+              {speciesDist.map((sp, i) => {
+                const color = getSpeciesColor(sp.species, i)
+                return (
+                  <li key={sp.species}>
+                    <div className="flex items-baseline justify-between text-sm">
+                      <span className="text-gray-700">{sp.species}</span>
+                      <span className="font-medium text-gray-900">
+                        {sp.count.toLocaleString('en-US')}
+                        <span className="ml-1.5 text-xs font-normal text-gray-500">{Math.round((sp.count / totalDetections) * 100)}%</span>
                       </span>
-                      <span className="text-xs text-gray-400">{unit}</span>
                     </div>
-                    <StatusBadge value={value} type={type} />
-                  </div>
-                ))}
-              </div>
-            </div>
+                    <div className="mt-1 h-1.5 rounded-full bg-gray-100">
+                      <div className="h-full rounded-full" style={{ width: `${(sp.count / speciesMax) * 100}%`, backgroundColor: color }} />
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="flex h-40 items-center justify-center text-sm text-gray-400">{detections ? 'No species detected' : 'Loading…'}</p>
           )}
+        </div>
+      </div>
 
-          {/* ── Detection Log Ikan ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700">🐠 Detection Log — Ikan</h3>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-400">{totalDetections} deteksi tercatat</span>
-                <button
-                  onClick={async () => {
-                    try {
-                      const rows = await fetchAllRows(`/api/detections?session_id=${sessionId}`, detectionTotal)
-                      await downloadXlsx(
-                        `detection-log-${sessionLabel}.xlsx`,
-                        ['TANGGAL', 'WAKTU MISI', 'SESSION ID', 'DURASI MISI', 'WAKTU DETEKSI', 'SPESIES', 'CONFIDENCE', 'KEDALAMAN (m)'],
-                        rows.map((r: any) => [
-                          fmtDate(r.detectedAt),
-                          fmtTimeRange(activeSession?.startTime ?? '', activeSession?.endTime ?? null),
-                          sessionLabel,
-                          sessionDuration > 0 ? formatDuration(sessionDuration) : '—',
-                          new Date(r.detectedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                          r.speciesName,
-                          { value: r.confidence, format: '0%' },
-                          r.depthAtDetection ?? null,
-                        ])
-                      )
-                    } catch {
-                      toast.error('Gagal mengunduh Excel deteksi')
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors"
-                >
-                  ↓ Download Excel
-                </button>
+      {/* Water quality — mission averages */}
+      <div>
+        <h2 className="mb-2 text-base font-semibold text-gray-900">
+          Water quality <span className="text-sm font-normal text-gray-500">· mission average</span>
+        </h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {telemetry ? (
+            <>
+              <SensorCard label="pH" value={hasTelemetry ? s.avgPh : null} range={rangeOf('Ph')} unit="pH" status={getPhStatus} />
+              {/* TDS status hidden until the team sets seawater thresholds (old 200–500 ppm = freshwater) */}
+              <SensorCard label="TDS" value={hasTelemetry ? s.avgTds : null} range={rangeOf('Tds')} unit="ppm" />
+              <SensorCard label="Dissolved oxygen" value={hasTelemetry ? s.avgDo : null} range={rangeOf('Do')} unit="mg/L" status={getDoStatus} />
+              <SensorCard label="Water temperature" value={hasTelemetry ? s.avgTemp : null} range={rangeOf('Temp')} unit="°C" status={getTempStatus} />
+            </>
+          ) : (
+            // Neutral placeholder while loading, so a mission never flashes "No data"
+            [0, 1, 2, 3].map(i => (
+              <div key={i} className={`${card} px-5 py-4`}>
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="mt-3 h-8 w-20" />
+                <Skeleton className="mt-3 h-3 w-12" />
               </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    {['TANGGAL', 'WAKTU MISI', 'SESSION ID', 'DURASI MISI', 'WAKTU DETEKSI', 'SPESIES', 'CONFIDENCE', 'KEDALAMAN'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left font-semibold text-gray-400 tracking-wider whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {detectionList.length > 0 ? detectionList.map((r: any, i: number) => {
-                    const conf = r.confidence ?? 0
-                    const color = getSpeciesColor(r.speciesName, i)
-                    return (
-                      <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(r.detectedAt)}</td>
-                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap font-mono">{fmtTimeRange(activeSession?.startTime ?? '', activeSession?.endTime ?? null)}</td>
-                        <td className="px-4 py-3">
-                          <span className="font-mono text-gray-400 border border-gray-200 px-2 py-0.5 rounded-lg bg-gray-50">{sessionLabel}</span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{sessionDuration > 0 ? formatDuration(sessionDuration) : '—'}</td>
-                        <td className="px-4 py-3 text-gray-500 font-mono whitespace-nowrap">
-                          {new Date(r.detectedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded text-white text-xs font-medium" style={{ backgroundColor: color }}>
-                            {r.speciesName}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full" style={{ width: `${conf * 100}%`, backgroundColor: color }} />
-                            </div>
-                            <span className="font-medium" style={{ color }}>{(conf * 100).toFixed(0)}%</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-gray-500">{r.depthAtDetection ? `${r.depthAtDetection}m` : '—'}</td>
-                      </tr>
-                    )
-                  }) : (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-300">Belum ada data deteksi</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+            ))
+          )}
+        </div>
+      </div>
 
-          {/* ── Detection Log Kualitas Air ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700">💧 Detection Log — Kualitas Air</h3>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-400">Sensor data</span>
-                <button
-                  onClick={async () => {
-                    try {
-                      const rows = await fetchAllRows(`/api/telemetry?session_id=${sessionId}`, telemetryTotal)
-                      await downloadXlsx(
-                        `telemetry-log-${sessionLabel}.xlsx`,
-                        ['TANGGAL', 'WAKTU MISI', 'SESSION ID', 'DURASI MISI', 'WAKTU SENSOR', 'PH', 'SUHU (C)', 'TDS (ppm)', 'DO (mg/L)'],
-                        rows.map((r: any) => [
-                          fmtDate(r.timestamp),
-                          fmtTimeRange(activeSession?.startTime ?? '', activeSession?.endTime ?? null),
-                          sessionLabel,
-                          sessionDuration > 0 ? formatDuration(sessionDuration) : '—',
-                          new Date(r.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                          r.phLevel,
-                          r.waterTemp,
-                          r.tdsValue,
-                          r.dissolvedOxygen,
-                        ])
-                      )
-                    } catch {
-                      toast.error('Gagal mengunduh Excel kualitas air')
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors"
-                >
-                  ↓ Download Excel
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    {['TANGGAL', 'WAKTU MISI', 'SESSION ID', 'DURASI MISI', 'WAKTU SENSOR', 'PH', 'SUHU (°C)', 'TDS (ppm)', 'DO (mg/L)'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left font-semibold text-gray-400 tracking-wider whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {telemetryList.length > 0 ? telemetryList.map((r: any) => (
-                    <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(r.timestamp)}</td>
-                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap font-mono">{fmtTimeRange(activeSession?.startTime ?? '', activeSession?.endTime ?? null)}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-gray-400 border border-gray-200 px-2 py-0.5 rounded-lg bg-gray-50">{sessionLabel}</span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{sessionDuration > 0 ? formatDuration(sessionDuration) : '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 font-mono whitespace-nowrap">
-                        {new Date(r.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                      </td>
-                      <td className={`px-4 py-3 font-medium ${getPhColor(r.phLevel)}`}>{r.phLevel?.toFixed(1)}</td>
-                      <td className={`px-4 py-3 font-medium ${getTempColor(r.waterTemp)}`}>{r.waterTemp?.toFixed(1)}</td>
-                      <td className={`px-4 py-3 font-medium ${getTdsColor(r.tdsValue)}`}>{r.tdsValue?.toFixed(0)}</td>
-                      <td className={`px-4 py-3 font-medium ${getDoColor(r.dissolvedOxygen)}`}>{r.dissolvedOxygen?.toFixed(1)}</td>
-                    </tr>
-                  )) : (
-                    <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-300">Belum ada data sensor</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+      {/* Both logs are narrow (4–5 columns): side by side on wide screens */}
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
+        <LogCard title="Detection log" shown={detectionList.length} total={detectionTotal} onDownload={downloadDetections}>
+          <table className="w-full text-sm sm:table-fixed">
+            <thead className="sticky top-0 bg-gray-50">
+              <tr>
+                <th className={th}>Time</th>
+                <th className={th}>Species</th>
+                <th className={th}>Confidence</th>
+                <th className={th}>Depth</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {detectionList.length > 0 ? detectionList.map((r, i) => (
+                <tr key={r.id}>
+                  <td className={`${td} text-gray-500`}>{fmtClock(r.detectedAt, true)}</td>
+                  <td className={td}>
+                    <span className="inline-flex items-center gap-2 text-gray-900">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getSpeciesColor(r.speciesName, i) }} />
+                      {r.speciesName}
+                    </span>
+                  </td>
+                  <td className={`${td} text-gray-700`}>{r.confidence != null ? `${Math.round(r.confidence * 100)}%` : '—'}</td>
+                  <td className={`${td} text-gray-700`}>{r.depthAtDetection != null ? `${r.depthAtDetection.toFixed(1)} m` : '—'}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-400">No detections recorded</td></tr>
+              )}
+            </tbody>
+          </table>
+        </LogCard>
 
-            {/* Keterangan warna */}
-            <div className="px-5 py-3 border-t border-gray-50 flex items-center gap-4 text-xs text-gray-500">
-              <span>Keterangan warna sensor:</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> Normal</span>
-              <span className="flex items-center gap-1 text-red-500"><span className="w-2 h-2 rounded-full bg-red-500" /> Di Bawah Normal</span>
-              <span className="flex items-center gap-1 text-yellow-500"><span className="w-2 h-2 rounded-full bg-yellow-400" /> Di Atas Normal</span>
-            </div>
-          </div>
-        </>
-      )}
+        <LogCard
+          title="Sensor log" shown={telemetryList.length} total={telemetryTotal} onDownload={downloadTelemetry}
+          footer={telemetryList.length > 0 && (
+            <p className="border-t border-gray-100 px-5 py-2.5 text-xs text-gray-500">
+              Coloured values are outside the normal range: pH {WATER_RANGES.ph.text}, DO {WATER_RANGES.do.text}, temp {WATER_RANGES.temp.text}.
+            </p>
+          )}
+        >
+          <table className="w-full text-sm sm:table-fixed">
+            <thead className="sticky top-0 bg-gray-50">
+              <tr>
+                <th className={th}>Time</th>
+                <th className={th}>pH</th>
+                <th className={th}>Temp °C</th>
+                <th className={th}>TDS ppm</th>
+                <th className={th}>DO mg/L</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {telemetryList.length > 0 ? telemetryList.map(r => (
+                <tr key={r.id}>
+                  <td className={`${td} text-gray-500`}>{fmtClock(r.timestamp, true)}</td>
+                  <td className={td}><Reading value={r.phLevel} digits={1} status={getPhStatus} /></td>
+                  <td className={td}><Reading value={r.waterTemp} digits={1} status={getTempStatus} /></td>
+                  <td className={td}><Reading value={r.tdsValue} digits={0} /></td>
+                  <td className={td}><Reading value={r.dissolvedOxygen} digits={1} status={getDoStatus} /></td>
+                </tr>
+              )) : (
+                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-400">No sensor readings recorded</td></tr>
+              )}
+            </tbody>
+          </table>
+        </LogCard>
+      </div>
     </div>
   )
 }

@@ -11,7 +11,7 @@ Perubahan dari versi lama:
 import logging
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, literal_column
@@ -36,6 +36,7 @@ def get_detection_analytics(
     hours: int = 24,
     session_id: Optional[str] = None,
     date: Optional[str] = None,
+    bucket: Literal["hour", "minute"] = "hour",
     db: Session = Depends(get_db),
     _: dict = Depends(get_current_user),
 ):
@@ -63,13 +64,15 @@ def get_detection_analytics(
         .one()
     )
 
-    # Jam UTC dengan penanda 'Z' (format sama dengan iso_utc): 2026-09-25T10:00:00Z
-    hour_key = func.date_format(Detection.detected_at, "%Y-%m-%dT%H:00:00Z")
+    # Ember jam/menit UTC dengan penanda 'Z' (format sama dengan iso_utc): 2026-09-25T10:00:00Z.
+    # Per menit untuk grafik satu misi — misi 10 menit per jam cuma jadi 1 titik.
+    fmt = "%Y-%m-%dT%H:%i:00Z" if bucket == "minute" else "%Y-%m-%dT%H:00:00Z"
+    time_key = func.date_format(Detection.detected_at, fmt)
     hourly = (
-        db.query(hour_key, func.count(Detection.id))
+        db.query(time_key, func.count(Detection.id))
         .filter(*conds)
-        .group_by(hour_key)
-        .order_by(hour_key)
+        .group_by(time_key)
+        .order_by(time_key)
         .all()
     )
 
@@ -128,19 +131,20 @@ def get_telemetry_analytics(
         conds.append(Telemetry.timestamp <= range_to)
 
     # Ringkasan dari SELURUH rentang (dulu cuma 500 baris pertama)
-    count, avg_ph, avg_tds, avg_do, avg_temp, first_ts, last_ts = (
+    # Min/maks ikut dikirim: rata-rata bisa menutupi pembacaan sesaat yang keluar batas
+    sensors = [Telemetry.ph_level, Telemetry.tds_value, Telemetry.dissolved_oxygen, Telemetry.water_temp]
+    count, first_ts, last_ts, *stats = (
         db.query(
             func.count(Telemetry.id),
-            func.avg(Telemetry.ph_level),
-            func.avg(Telemetry.tds_value),
-            func.avg(Telemetry.dissolved_oxygen),
-            func.avg(Telemetry.water_temp),
             func.min(Telemetry.timestamp),
             func.max(Telemetry.timestamp),
+            *[agg(col) for col in sensors for agg in (func.avg, func.min, func.max)],
         )
         .filter(*conds)
         .one()
     )
+    (avg_ph, min_ph, max_ph, avg_tds, min_tds, max_tds,
+     avg_do, min_do, max_do, avg_temp, min_temp, max_temp) = stats
     latest_depth = (
         db.query(Telemetry.depth)
         .filter(*conds)
@@ -160,6 +164,10 @@ def get_telemetry_analytics(
                 "avgTds": _r(avg_tds),
                 "avgDo": _r(avg_do),
                 "avgTemp": _r(avg_temp),
+                "minPh": _r(min_ph), "maxPh": _r(max_ph),
+                "minTds": _r(min_tds), "maxTds": _r(max_tds),
+                "minDo": _r(min_do), "maxDo": _r(max_do),
+                "minTemp": _r(min_temp), "maxTemp": _r(max_temp),
                 "dataPoints": count,
                 "latestDepth": _r(latest_depth),
             },

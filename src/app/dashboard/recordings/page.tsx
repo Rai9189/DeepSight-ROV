@@ -18,17 +18,18 @@ async function getRecordings(token: string) {
   }
 }
 
-export default async function RecordingsPage() {
+export default async function RecordingsPage({ searchParams }: { searchParams: Promise<{ play?: string }> }) {
   const session = await requireAuth()
   const cookieStore = await cookies()
   const token = cookieStore.get('access_token')?.value || ''
   const recordings = await getRecordings(token)
+  const { play } = await searchParams
 
   return (
     <>
       <Header title="Recordings" subtitle="Mission video recordings" />
       <main className="px-4 py-4 lg:px-6">
-        <RecordingsTable recordings={recordings} isAdmin={session.user.role === 'ADMIN'} />
+        <RecordingsTable recordings={recordings} isAdmin={session.user.role === 'ADMIN'} playId={play} />
       </main>
     </>
   )

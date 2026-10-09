@@ -22,6 +22,7 @@ interface Recording {
 interface RecordingsTableProps {
   recordings: Recording[]
   isAdmin: boolean
+  playId?: string
 }
 
 function formatDuration(seconds: number | null): string {
@@ -54,13 +55,14 @@ const missionLabel = (rec: Recording) => rec.missionName || rec.fileName
 
 const iconBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100'
 
-export default function RecordingsTable({ recordings: initialRecordings, isAdmin }: RecordingsTableProps) {
+export default function RecordingsTable({ recordings: initialRecordings, isAdmin, playId }: RecordingsTableProps) {
   const [recordings, setRecordings] = useState(initialRecordings)
   useEffect(() => { setRecordings(initialRecordings) }, [initialRecordings])
 
   const [deleting, setDeleting] = useState<Recording | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [playingVideo, setPlayingVideo] = useState<Recording | null>(null)
+  // ?play=<id> (e.g. from a mission report) opens that recording straight away
+  const [playingVideo, setPlayingVideo] = useState<Recording | null>(() => initialRecordings.find(r => r.id === playId) ?? null)
   const [videoMissing, setVideoMissing] = useState(false)
   const [search, setSearch] = useState('')
   const [newestFirst, setNewestFirst] = useState(true)
@@ -196,7 +198,15 @@ export default function RecordingsTable({ recordings: initialRecordings, isAdmin
       )}
 
       {/* ── Video player ── */}
-      <Dialog open={!!playingVideo} onOpenChange={open => { if (!open) setPlayingVideo(null) }}>
+      <Dialog
+        open={!!playingVideo}
+        onOpenChange={open => {
+          if (open) return
+          setPlayingVideo(null)
+          // Drop ?play= so a refresh doesn't reopen the player
+          if (playId) window.history.replaceState(null, '', window.location.pathname)
+        }}
+      >
         <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold">{playingVideo && missionLabel(playingVideo)}</DialogTitle>

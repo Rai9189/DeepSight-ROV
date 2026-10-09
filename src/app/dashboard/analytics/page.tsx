@@ -7,8 +7,8 @@ export default async function AnalyticsPage() {
 
   return (
     <>
-      <Header title="Analytics" subtitle="Fish detection, water quality and AUV status" />
-      <main className="p-0 lg:px-4 mt-4">
+      <Header title="Analytics" subtitle="Fish detection and water quality per mission" />
+      <main className="px-4 mt-4">
         <AnalyticsContent />
       </main>
     </>
