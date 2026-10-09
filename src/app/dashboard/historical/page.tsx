@@ -8,10 +8,10 @@ export default async function HistoricalPage() {
   return (
     <>
       <Header
-        title="Historical"
-        subtitle="Past missions and reports"
+        title="Trends"
+        subtitle="Water quality and fish counts across missions"
       />
-      <main className="p-0 lg:px-4 mt-4">
+      <main className="px-4 mt-4">
         <HistoricalContent />
       </main>
     </>

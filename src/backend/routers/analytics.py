@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, literal_column
 
 from database.connection import get_db
-from database.models import Detection, Telemetry, AUVStatus, MonitoringSession, SessionStatus
+from database.models import Detection, FishCount, Telemetry, AUVStatus, MonitoringSession, SessionStatus
 from core.dependencies import get_current_user
 from core.timeutil import iso_utc, parse_local
 from core.csv_export import parse_date_range
@@ -387,9 +387,18 @@ def get_all_sessions(
     }
     empty_avg = {"avgPh": None, "avgTds": None, "avgTemp": None, "avgDo": None}
 
+    # Ikan terhitung (fish_counts = puncak per frame) per spesies per sesi, juga 1 query
+    fish_map: dict = {}
+    for sid, species, total in db.query(FishCount.session_id, FishCount.species_name, FishCount.total_ikan).all():
+        fish_map.setdefault(sid, []).append({"species": species, "count": int(total or 0)})
+
+    def _fish(sid):
+        fish = sorted(fish_map.get(sid, []), key=lambda f: -f["count"])
+        return {"fish": fish, "totalFish": sum(f["count"] for f in fish)}
+
     return {
         "success": True,
-        "data": [{**_format_session(s), **avg_map.get(s.id, empty_avg)} for s in sessions],
+        "data": [{**_format_session(s), **avg_map.get(s.id, empty_avg), **_fish(s.id)} for s in sessions],
         "total": len(sessions),
     }
 

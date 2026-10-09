@@ -228,6 +228,11 @@ def test_telemetry_summary_min_max(client, admin, user_h):
     assert (summ["minPh"], summ["maxTemp"]) == (7.0, 29.0)
 
 
+def test_sessions_include_fish_counts(client, user_h, mission):
+    row = next(r for r in client.get("/api/analytics/sessions", headers=user_h).json()["data"] if r["id"] == mission)
+    assert row["fish"] == [{"species": "ikan", "count": 1}] and row["totalFish"] == 1
+
+
 def test_detection_bucket(client, user_h):
     get = lambda b: client.get("/api/analytics/detections", params={"bucket": b}, headers=user_h).status_code
     assert get("minute") == 200
