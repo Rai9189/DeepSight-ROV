@@ -7,7 +7,7 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "cd src/backend && python seed.py"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
