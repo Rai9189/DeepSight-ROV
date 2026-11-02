@@ -158,7 +158,7 @@ export default function UsersContent({ currentUserId }: { currentUserId: string 
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left">
                 <tr>
