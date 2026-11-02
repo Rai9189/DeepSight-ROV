@@ -2,9 +2,11 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Download, Play, Search, Trash2 } from 'lucide-react'
+import { Download, Pencil, Play, Search, Trash2 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { useCurrentUser } from '@/components/layout/UserMenu'
 
 interface Recording {
   id: string
@@ -17,6 +19,7 @@ interface Recording {
   createdAt: string
   updatedAt: string
   missionName?: string | null
+  missionOwnerId?: string | null
 }
 
 interface RecordingsTableProps {
@@ -61,6 +64,12 @@ export default function RecordingsTable({ recordings: initialRecordings, isAdmin
 
   const [deleting, setDeleting] = useState<Recording | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  // The recording's name is its mission's name, so renaming renames the mission (admin or mission owner)
+  const currentUser = useCurrentUser()
+  const canRename = (rec: Recording) => isAdmin || (!!currentUser?.id && rec.missionOwnerId === currentUser.id)
+  const [renaming, setRenaming] = useState<Recording | null>(null)
+  const [newName, setNewName] = useState('')
+  const [isRenaming, setIsRenaming] = useState(false)
   // ?play=<id> (e.g. from a mission report) opens that recording straight away
   const [playingVideo, setPlayingVideo] = useState<Recording | null>(() => initialRecordings.find(r => r.id === playId) ?? null)
   const [videoMissing, setVideoMissing] = useState(false)
@@ -88,6 +97,25 @@ export default function RecordingsTable({ recordings: initialRecordings, isAdmin
       toast.error(err instanceof Error ? err.message : "Couldn't delete the recording")
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  const openRename = (rec: Recording) => { setNewName(rec.missionName ?? ''); setRenaming(rec) }
+  const confirmRename = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const name = newName.trim()
+    if (!renaming || !name) return
+    setIsRenaming(true)
+    try {
+      await apiClient.patch(`/api/sessions/${renaming.sessionId}`, { locationName: name })
+      // Every recording of that mission shows the new name
+      setRecordings(prev => prev.map(r => r.sessionId === renaming.sessionId ? { ...r, missionName: name } : r))
+      toast.success('Recording renamed')
+      setRenaming(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't rename the recording")
+    } finally {
+      setIsRenaming(false)
     }
   }
 
@@ -157,6 +185,7 @@ export default function RecordingsTable({ recordings: initialRecordings, isAdmin
                     src={`${backendUrl}/api/recordings/stream/${rec.fileName}#t=0.5`}
                     preload="metadata"
                     muted
+                    disablePictureInPicture
                     playsInline
                     tabIndex={-1}
                     className="pointer-events-none h-full w-full object-cover"
@@ -183,6 +212,11 @@ export default function RecordingsTable({ recordings: initialRecordings, isAdmin
                       <button onClick={() => handleDownload(rec.fileName)} aria-label={`Download ${name}`} title="Download" className={`${iconBtn} border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900`}>
                         <Download className="h-4 w-4" />
                       </button>
+                      {canRename(rec) && (
+                        <button onClick={() => openRename(rec)} aria-label={`Rename ${name}`} title="Rename" className={`${iconBtn} border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900`}>
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                       {isAdmin && (
                         <button onClick={() => setDeleting(rec)} aria-label={`Delete ${name}`} title="Delete" className={`${iconBtn} border-red-200 text-red-600 hover:bg-red-50`}>
                           <Trash2 className="h-4 w-4" />
@@ -224,11 +258,49 @@ export default function RecordingsTable({ recordings: initialRecordings, isAdmin
             <video
               controls
               autoPlay
+              disablePictureInPicture
               onError={() => setVideoMissing(true)}
               className="w-full rounded-lg bg-black"
               src={`${backendUrl}/api/recordings/stream/${playingVideo.fileName}`}
             />
           ))}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Rename (admin or mission owner) ── */}
+      <Dialog open={!!renaming} onOpenChange={open => { if (!open && !isRenaming) setRenaming(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={confirmRename} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle className="text-base font-semibold">Rename recording</DialogTitle>
+              <DialogDescription>This also renames the mission in Mission Report and Trends.</DialogDescription>
+            </DialogHeader>
+            <Input
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              maxLength={255}
+              autoFocus
+              aria-label="Mission name"
+              placeholder="Mission name"
+            />
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => setRenaming(null)}
+                disabled={isRenaming}
+                className="h-9 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isRenaming || !newName.trim()}
+                className="h-9 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-70"
+              >
+                {isRenaming ? 'Saving…' : 'Save'}
+              </button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -238,7 +310,7 @@ export default function RecordingsTable({ recordings: initialRecordings, isAdmin
           <DialogHeader>
             <DialogTitle className="text-base font-semibold">Delete recording?</DialogTitle>
             <DialogDescription>
-              {deleting && <><span className="font-medium text-gray-900">{missionLabel(deleting)}</span> will be removed and its video file permanently deleted from the server. This can&apos;t be undone.</>}
+              {deleting && <><span className="font-medium text-gray-900">{missionLabel(deleting)}</span> will be removed and its video file permanently deleted from the server. This can&apos;t be undone. The mission report and its data are kept.</>}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

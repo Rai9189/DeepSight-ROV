@@ -19,20 +19,21 @@ Semua user yang login boleh melihat dan menutup (complete/abort) misi siapa
 pun; menghapus misi hanya ADMIN.
 """
 import logging
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 
-from database.connection import get_db
+from database.connection import engine, get_db
 from database.models import (
     MonitoringSession, SessionStatus,
     Detection, Telemetry, AUVStatus, VideoPath
 )
 from core.dependencies import get_current_user, require_admin
 from core.cuid import generate_cuid
-from core.validation import safe_str
+from core.validation import safe_str, LIST_MAX_PAGE
 from core.timeutil import iso_utc
 from routers.recordings import delete_recording_files
 
@@ -66,34 +67,39 @@ def create_session(
         raise HTTPException(status_code=400, detail=str(e))
     if not location_name:
         raise HTTPException(status_code=400, detail="locationName wajib diisi")
+    _check_name_length(location_name)
 
-    # Cek apakah sudah ada sesi yang Running
-    active = (
-        db.query(MonitoringSession)
-        .filter(MonitoringSession.status == SessionStatus.RUNNING)
-        .first()
-    )
-    if active:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Sudah ada sesi aktif: {active.id} ({active.location_name}). "
-                   f"Selesaikan sesi tersebut sebelum membuat sesi baru."
+    with _start_mission_lock():
+        # FOR UPDATE = baca data terbaru, bukan snapshot awal transaksi
+        active = (
+            db.query(MonitoringSession)
+            .filter(MonitoringSession.status == SessionStatus.RUNNING)
+            .with_for_update()
+            .first()
+        )
+        if active:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=f"Sudah ada sesi aktif: {active.id} ({active.location_name}). "
+                       f"Selesaikan sesi tersebut sebelum membuat sesi baru."
+            )
+
+        now = datetime.now(timezone.utc)
+        session = MonitoringSession(
+            id=generate_cuid(),
+            user_id=current_user["id"],
+            location_name=location_name,
+            start_time=now,
+            end_time=None,
+            status=SessionStatus.RUNNING,
+            created_at=now,
+            updated_at=now,
         )
 
-    now = datetime.now(timezone.utc)
-    session = MonitoringSession(
-        id=generate_cuid(),
-        user_id=current_user["id"],
-        location_name=location_name,
-        start_time=now,
-        end_time=None,
-        status=SessionStatus.RUNNING,
-        created_at=now,
-        updated_at=now,
-    )
+        db.add(session)
+        db.commit()
 
-    db.add(session)
-    db.commit()
     db.refresh(session)
 
     logger.info(
@@ -148,7 +154,7 @@ def get_sessions(
     Opsional filter by status: Running | Completed | Aborted
     """
     limit = min(max(limit, 1), 500)
-    page = max(page, 1)
+    page = min(max(page, 1), LIST_MAX_PAGE)
     skip = (page - 1) * limit
     query = db.query(MonitoringSession)
 
@@ -257,6 +263,9 @@ def update_session(
 
     Payload:
         status : "Completed" | "Aborted"
+
+    Tanpa status = ganti nama saja (rename): boleh untuk misi apa pun,
+    hanya oleh admin atau pemilik misi.
     """
     session = db.query(MonitoringSession).filter(
         MonitoringSession.id == session_id
@@ -270,6 +279,20 @@ def update_session(
         location_name = safe_str(body.get("locationName"), "locationName")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    _check_name_length(location_name)
+
+    if not new_status:
+        if not location_name:
+            raise HTTPException(status_code=400, detail="Mission name is required")
+        if current_user["role"] != "ADMIN" and session.user_id != current_user["id"]:
+            raise HTTPException(status_code=403, detail="Only an admin or the mission owner can rename it")
+        session.location_name = location_name
+        session.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(session)
+        logger.info(f"Session {session_id} renamed by user={current_user['email']}")
+        return {"success": True, "data": _format_session(session)}
+
     if new_status not in ("Completed", "Aborted"):
         raise HTTPException(
             status_code=400,
@@ -339,6 +362,30 @@ def delete_session(
 # ==========================
 # Helper
 # ==========================
+def _check_name_length(name: Optional[str]) -> None:
+    """Kolom location_name VARCHAR(255): lebih panjang = 400, bukan DataError → 500."""
+    if name and len(name) > 255:
+        raise HTTPException(status_code=400, detail="Mission name is too long (max 255 characters)")
+
+
+@contextmanager
+def _start_mission_lock():
+    """
+    Serialkan pembuatan misi: tanpa ini request paralel (klik ganda Start) sama-sama
+    melihat "tidak ada misi Running" lalu membuat misi masing-masing. Memakai koneksi
+    sendiri karena named lock MySQL melekat ke koneksi, sedangkan commit di `db`
+    mengembalikan koneksinya ke pool. ponytail: hanya menjaga POST ini; bila ada jalur
+    lain yang membuat misi Running, ganti dengan unique index.
+    """
+    with engine.connect() as conn:
+        if conn.execute(text("SELECT GET_LOCK('carter_start_mission', 10)")).scalar() != 1:
+            raise HTTPException(status_code=409, detail="Another mission is starting, please try again")
+        try:
+            yield
+        finally:
+            conn.execute(text("SELECT RELEASE_LOCK('carter_start_mission')"))
+
+
 def _format_session(s: MonitoringSession) -> dict:
     return {
         "id": s.id,

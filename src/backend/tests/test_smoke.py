@@ -287,3 +287,13 @@ def test_detection_bucket(client, user_h):
 def test_no_server_error(client, admin_h, mission, path):
     r = client.get(path.format(sid=mission), headers=admin_h)
     assert r.status_code < 500, f"{path} -> {r.status_code} {r.text[:200]}"
+
+
+def test_rename_finished_mission(client, db, admin, admin_h, user_h):
+    s = make_session(db, admin)
+    url = f"/api/sessions/{s.id}"
+    assert client.patch(url, json={"locationName": "Bukan punyaku"}, headers=user_h).status_code == 403
+    assert client.patch(url, json={"locationName": "  "}, headers=admin_h).status_code == 400
+    r = client.patch(url, json={"locationName": "Survei Pantai — Carter"}, headers=admin_h)
+    assert r.status_code == 200 and r.json()["data"]["locationName"] == "Survei Pantai — Carter"
+    assert r.json()["data"]["status"] == "Completed"  # rename tidak mengubah status

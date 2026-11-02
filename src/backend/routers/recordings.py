@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session, joinedload
 from database.connection import get_db
 from database.models import VideoPath, MonitoringSession, SessionStatus
 from core.dependencies import get_current_user, require_admin
-from core.validation import safe_str
+from core.validation import safe_str, LIST_MAX_PAGE
 from config import RECORDINGS_DIR, LEGACY_RECORDINGS_DIR
 from core.timeutil import iso_utc
 
@@ -95,7 +95,7 @@ def get_recordings(
     _: dict = Depends(get_current_user),
 ):
     limit = min(max(limit, 1), 500)
-    page = max(page, 1)
+    page = min(max(page, 1), LIST_MAX_PAGE)
     skip = (page - 1) * limit
     query = db.query(VideoPath)
 
@@ -243,6 +243,7 @@ def _format_recording(r: VideoPath) -> dict:
         "id": r.id,
         "sessionId": r.session_id,
         "missionName": r.session.location_name if r.session else None,
+        "missionOwnerId": r.session.user_id if r.session else None,
         "fileName": r.file_name,
         "filePath": r.file_path,
         "fileSize": r.file_size,

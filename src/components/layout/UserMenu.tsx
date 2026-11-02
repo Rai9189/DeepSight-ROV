@@ -16,6 +16,8 @@ type CurrentUser = AuthSession['user']
 // Set once in dashboard/layout.tsx so every page's Header can show the account menu
 const CurrentUserContext = createContext<CurrentUser | null>(null)
 
+export const useCurrentUser = () => useContext(CurrentUserContext)
+
 export function CurrentUserProvider({ user, children }: { user: CurrentUser; children: React.ReactNode }) {
   return <CurrentUserContext.Provider value={user}>{children}</CurrentUserContext.Provider>
 }

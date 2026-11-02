@@ -1,11 +1,12 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import Link from 'next/link'
-import { BarChart3, Download, Play } from 'lucide-react'
+import { BarChart3, Download, Play, Trash2 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { downloadXlsx } from '@/lib/xlsx-export'
 import { getSpeciesColor } from '@/lib/species'
@@ -13,6 +14,8 @@ import { TONE, WATER_RANGES, getPhStatus, getDoStatus, getTempStatus, type Water
 import SensorCard from '@/components/dashboard/SensorCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import MissionPicker from '@/components/analytics/MissionPicker'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useCurrentUser } from '@/components/layout/UserMenu'
 
 const fetcher = apiClient.swrFetcher
 
@@ -22,6 +25,13 @@ const LOG_ROWS = 20
 const MINUTE = 60_000
 
 const card = 'bg-white rounded-2xl border border-gray-100 shadow-sm'
+
+// Last mission viewed in this tab, so coming back via the sidebar (URL without ?session) reopens it
+const LAST_MISSION_KEY = 'mission-report:last'
+const readLastMission = () => { try { return sessionStorage.getItem(LAST_MISSION_KEY) } catch { return null } }
+const writeLastMission = (id: string | null) => {
+  try { if (id) sessionStorage.setItem(LAST_MISSION_KEY, id); else sessionStorage.removeItem(LAST_MISSION_KEY) } catch {}
+}
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -123,12 +133,19 @@ const td = 'px-2 sm:px-4 py-2.5 text-center whitespace-nowrap'
 export default function AnalyticsContent() {
   // Selected mission lives in the URL (?session=…) so refresh, back and shared links keep it
   const router = useRouter()
-  const selectedId = useSearchParams().get('session')
+  const urlId = useSearchParams().get('session')
+  const [lastId] = useState(readLastMission)
+  const selectedId = urlId ?? lastId
+  const isAdmin = useCurrentUser()?.role === 'ADMIN'
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  const { data: sessionsData, error: sessionsError, isLoading: sessionsLoading } = useSWR('/api/analytics/sessions', fetcher, { refreshInterval: 30000 })
+  const { data: sessionsData, error: sessionsError, isLoading: sessionsLoading, mutate: mutateSessions } = useSWR('/api/analytics/sessions', fetcher, { refreshInterval: 30000 })
   const allSessions: any[] = (sessionsData as any)?.data || []
   const session = allSessions.find(s => s.id === selectedId) ?? allSessions[0]
   const sessionId: string = session?.id ?? ''
+
+  useEffect(() => { if (sessionId) writeLastMission(sessionId) }, [sessionId])
 
   const q = `session_id=${sessionId}`
   const { data: detectionData } = useSWR(sessionId ? `/api/analytics/detections?${q}&${ALL_TIME}&bucket=minute` : null, fetcher, { refreshInterval: 30000 })
@@ -169,6 +186,22 @@ export default function AnalyticsContent() {
   }
 
   const isLive = session.status === 'Running'
+
+  const deleteMission = async () => {
+    setIsDeleting(true)
+    try {
+      await apiClient.delete(`/api/sessions/${session.id}`)
+      toast.success('Mission deleted')
+      setConfirmingDelete(false)
+      writeLastMission(null)
+      await mutateSessions()
+      router.replace('/dashboard/analytics', { scroll: false })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't delete the mission")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
   const startMs = new Date(session.startTime).getTime()
   const endMs = session.endTime ? new Date(session.endTime).getTime() : Date.now()
   const durationSec = Math.floor((endMs - startMs) / 1000)
@@ -252,14 +285,24 @@ export default function AnalyticsContent() {
               {fmtDate(session.startTime)} · {fmtClock(session.startTime)}{session.endTime ? ` – ${fmtClock(session.endTime)}` : ' – now'}
             </p>
           </div>
-          {recording && (
-            <Link
-              href={`/dashboard/recordings?play=${recording.id}`}
-              className="inline-flex shrink-0 self-start items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
-            >
-              <Play className="h-3.5 w-3.5" /> Watch recording
-            </Link>
-          )}
+          <div className="flex shrink-0 self-start items-center gap-2">
+            {recording && (
+              <Link
+                href={`/dashboard/recordings?play=${recording.id}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+              >
+                <Play className="h-3.5 w-3.5" /> Watch recording
+              </Link>
+            )}
+            {isAdmin && !isLive && (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-100"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete mission
+              </button>
+            )}
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-gray-100 pt-4 sm:grid-cols-3 lg:grid-cols-6">
           <Stat label="Fish counted" value={session.totalFish ?? '—'} hint="Most seen at once" />
@@ -420,6 +463,35 @@ export default function AnalyticsContent() {
           </table>
         </LogCard>
       </div>
+
+      {/* ── Delete mission (admin only) ── */}
+      <Dialog open={confirmingDelete} onOpenChange={open => { if (!open && !isDeleting) setConfirmingDelete(false) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Delete mission?</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-gray-900">{session.locationName || 'Untitled mission'}</span> will be removed with all its
+              sensor readings, fish detections and recordings. This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              onClick={() => setConfirmingDelete(false)}
+              disabled={isDeleting}
+              className="h-9 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={deleteMission}
+              disabled={isDeleting}
+              className="h-9 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-70"
+            >
+              {isDeleting ? 'Deleting…' : 'Delete mission'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
