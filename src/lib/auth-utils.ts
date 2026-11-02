@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { decodeJWT } from '@/lib/jwt'
 
 export interface AuthUser {
   id: string
@@ -12,26 +13,6 @@ export interface AuthUser {
 
 export interface AuthSession {
   user: AuthUser
-}
-
-function decodeJWT(token: string): AuthUser | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return null
-    const decoded = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
-    const data = JSON.parse(decoded)
-    if (data.exp && Date.now() / 1000 > data.exp) return null
-    return {
-      id: data.sub || '',
-      email: data.email || '',
-      fullName: data.fullName || data.full_name || data.email || '',
-      role: data.role || 'USER',
-      phoneNumber: data.phoneNumber || data.phone_number || '',
-      mustChangePassword: data.mustChangePassword === true,
-    }
-  } catch {
-    return null
-  }
 }
 
 export async function getAuthSession(): Promise<AuthSession | null> {

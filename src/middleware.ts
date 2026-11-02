@@ -14,6 +14,7 @@
  * saat komponen pertama kali mount.
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { decodeJWT } from '@/lib/jwt'
 
 // Route yang butuh login
 const PROTECTED_ROUTES = ['/dashboard']
@@ -26,20 +27,25 @@ export function middleware(request: NextRequest) {
 
   // Cek token dari cookie (di-set saat login via authHelper)
   const token = request.cookies.get('access_token')?.value
+  // Cek sama dengan requireAuth: cookie rusak/kedaluwarsa dianggap belum login.
+  // Kalau beda, /dashboard ↔ /auth/login saling redirect tanpa henti.
+  const session = token ? decodeJWT(token) : null
 
-  // Kalau akses protected route tanpa token → redirect ke login
+  // Kalau akses protected route tanpa token valid → redirect ke login
   const isProtected = PROTECTED_ROUTES.some((route) =>
     pathname.startsWith(route)
   )
-  if (isProtected && !token) {
+  if (isProtected && !session) {
     const loginUrl = new URL('/auth/login', request.url)
     loginUrl.searchParams.set('callbackUrl', pathname)
-    return NextResponse.redirect(loginUrl)
+    const response = NextResponse.redirect(loginUrl)
+    response.cookies.delete('access_token')
+    return response
   }
 
   // Kalau sudah login dan akses halaman auth → redirect ke dashboard
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route))
-  if (isAuthRoute && token) {
+  if (isAuthRoute && session) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
