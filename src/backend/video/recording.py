@@ -105,6 +105,15 @@ async def stop_recording(client_id: str) -> Optional[dict]:
             f"{recording_info['filename']} ({duration:.1f}s, {file_size/1024/1024:.2f}MB)"
         )
 
+        if recording_info["track"].recorded_frames == 0:
+            # Kamera/RTSP tidak pernah mengirim frame: jangan buat entri Recordings kosong
+            try:
+                os.remove(filepath)
+            except OSError:
+                pass
+            logger.warning(f"Recording {recording_info['filename']} has no frames — not saved")
+            return {**recording_data, "saved": False}
+
         # Simpan langsung via SQLAlchemy ke tabel video_paths
         db_id = await save_recording_to_db(
             session_id=recording_info["session_id"],

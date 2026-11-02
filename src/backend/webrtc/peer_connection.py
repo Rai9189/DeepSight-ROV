@@ -38,6 +38,8 @@ async def handle_offer(websocket, client_id: str, message: dict):
         raise ValueError("Pesan offer tidak memiliki field 'sdp'")
     pref_codec = (message.get("codec") or PREFER_CODEC).lower()
     max_kbps = int(message.get("maxBitrateKbps") or MAX_BITRATE_KBPS_DEFAULT)
+    if max_kbps <= 0:  # nilai negatif membuat video tidak pernah tampil
+        max_kbps = MAX_BITRATE_KBPS_DEFAULT
     fps = int(message.get("fps") or TARGET_FPS)
 
     # Transport RTSP from query params
@@ -182,6 +184,12 @@ def get_average_fps() -> Tuple[float, float]:
         sum(t.current_fps for t in tracks) / n,
         sum(t.current_infer_fps for t in tracks) / n,
     )
+
+
+def get_average_infer_ms() -> float:
+    """Rata-rata lama YOLO per frame (ms) dari semua track aktif; 0 jika tidak ada client."""
+    tracks = list(detection_tracks.values())
+    return sum(t.infer_ms for t in tracks) / len(tracks) if tracks else 0.0
 
 
 async def cleanup_all():

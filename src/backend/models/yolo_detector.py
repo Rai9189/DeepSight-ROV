@@ -3,6 +3,7 @@ YOLO Model Loader and Inference
 """
 import os
 import logging
+import threading
 import torch
 import numpy as np
 from typing import Optional, List, Tuple
@@ -13,6 +14,7 @@ logger = logging.getLogger("carter-backend")
 # Global model instance
 custom_model = None
 device_info = "CPU"
+_infer_lock = threading.Lock()
 
 
 def load_custom_model():
@@ -86,14 +88,16 @@ def run_inference(
         return []
 
     try:
-        res = custom_model(
-            img,
-            verbose=False,
-            conf=conf,
-            iou=iou,
-            max_det=max_det,
-            device='cuda' if torch.cuda.is_available() else 'cpu'
-        )
+        # Model dipanggil dari thread (asyncio.to_thread); satu inferensi sekaligus untuk semua client
+        with _infer_lock:
+            res = custom_model(
+                img,
+                verbose=False,
+                conf=conf,
+                iou=iou,
+                max_det=max_det,
+                device='cuda' if torch.cuda.is_available() else 'cpu'
+            )
 
         dets = []
         for r in res:

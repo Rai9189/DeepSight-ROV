@@ -9,8 +9,8 @@ load_dotenv()
 RTSP_URL = os.getenv("RTSP_URL", "rtsp://192.168.2.2:8554/cam")
 RTSP_TRANSPORT = os.getenv("RTSP_TRANSPORT", "udp")
 TARGET_FPS = int(os.getenv("TARGET_FPS", "30"))
-RESIZE_WIDTH = int(os.getenv("RESIZE_WIDTH", "1280"))
-RESIZE_HEIGHT = int(os.getenv("RESIZE_HEIGHT", "720"))
+RESIZE_WIDTH = int(os.getenv("RESIZE_WIDTH", "854"))
+RESIZE_HEIGHT = int(os.getenv("RESIZE_HEIGHT", "480"))
 
 # ==========================
 # Bitrate Control

@@ -17,9 +17,10 @@ from webrtc.peer_connection import (
     cleanup_pc,
     get_peer_connections,
     get_detection_track,
-    get_average_fps
+    get_average_fps,
+    get_average_infer_ms,
 )
-from config import CORS_ORIGINS
+from config import CORS_ORIGINS, YOLO_CONF_THRESHOLD
 from core.dependencies import get_current_user, get_user_from_token
 from database.connection import SessionLocal
 from core.system_metrics import get_cpu_percent, get_gpu_percent
@@ -85,6 +86,7 @@ def setup_routes(app: FastAPI):
         return {
             "fps": round(fps, 2),
             "inference_fps": round(inference_fps, 2),
+            "inference_ms": round(get_average_infer_ms(), 1),
             "active_peer_connections": len(get_peer_connections()),
             "device": get_device_info(),
             "model_loaded": model is not None,
@@ -95,8 +97,8 @@ def setup_routes(app: FastAPI):
 
     @app.get("/api/model-info")
     async def model_info(_: dict = Depends(get_current_user)):
-        """Model information endpoint"""
-        return get_model_info()
+        """Model information endpoint (+ detection confidence threshold for the Stream UI)"""
+        return {**get_model_info(), "conf_threshold": YOLO_CONF_THRESHOLD}
 
     @app.post("/api/recording/start/{client_id}")
     async def start_recording_endpoint(client_id: str, current_user: dict = Depends(get_current_user)):

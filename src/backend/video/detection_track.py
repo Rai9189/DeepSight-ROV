@@ -32,6 +32,14 @@ RECORD_TIME_BASE = Fraction(1, 1000)  # pts dalam milidetik jam dinding
 RECORD_MOVFLAGS = "frag_keyframe+empty_moov+default_base_moof"
 RECORD_GOP = 30  # keyframe tiap 30 frame = batas fragmen; crash kehilangan < 1 fragmen
 RECORD_QUEUE_SIZE = 60
+STATS_LOG_SECONDS = 10  # ringkasan fps/inferensi di log backend untuk diagnosis latensi
+
+
+def timed_inference(img, conf, iou, max_det):
+    """run_inference + lama YOLO sebenarnya (ms), diukur di thread inferensi."""
+    t = time.perf_counter()
+    dets = run_inference(img, conf, iou, max_det)
+    return dets, (time.perf_counter() - t) * 1000
 
 
 def write_recording(filepath: str, frames: "queue.Queue") -> int:
@@ -99,11 +107,16 @@ class RtspDetectionTrack(VideoStreamTrack):
         self.last_infer_time = time.time()
         self.current_fps = 0.0
         self.current_infer_fps = 0.0
+        self.infer_ms = 0.0  # lama YOLO per frame (bukan 1/inference_fps)
+        self.last_stats_log = time.time()
 
         self.size = (RESIZE_WIDTH, RESIZE_HEIGHT) if (RESIZE_WIDTH and RESIZE_HEIGHT) else None
         self.conf = YOLO_CONF_THRESHOLD
         self.iou = YOLO_IOU_THRESHOLD
         self.max_det = YOLO_MAX_DETECTIONS
+
+        # Inferensi berjalan di thread; video tidak menunggu hasilnya
+        self.infer_task: Optional[asyncio.Task] = None
 
         # Database saving
         self.last_save_time = time.time()
@@ -111,44 +124,73 @@ class RtspDetectionTrack(VideoStreamTrack):
 
         # Recording: frame dikirim ke thread penulis (write_recording) lewat antrean
         self.recording = False
+        self.recorded_frames = 0
         self.frame_queue: Optional[queue.Queue] = None
         self.writer_thread: Optional[threading.Thread] = None
 
+    def drop_stale_frames(self):
+        """
+        MediaPlayer aiortc (RTSP) menumpuk frame di antrean tanpa batas; bila
+        kita lebih lambat dari kamera, latensi terus bertambah. Buang semua
+        frame yang sudah basi agar yang dikirim selalu frame terbaru.
+        ponytail: menyentuh _queue privat aiortc (dipin 1.14.0 di requirements);
+        cek ulang bila aiortc di-upgrade.
+        """
+        q = getattr(self.src, "_queue", None)
+        latest = None
+        while q is not None and not q.empty():
+            item = q.get_nowait()
+            if item is None:  # tanda akhir stream: kembalikan agar recv berikutnya berhenti
+                q.put_nowait(None)
+                break
+            latest = item
+        return latest
+
+    def apply_detections(self, dets, infer_ms: float = 0.0):
+        self.last_dets = dets
+        self.infer_ms = infer_ms
+
+        # Save detections to database periodically
+        now = time.time()
+        if (SAVE_DETECTIONS_ENABLED and
+            len(dets) >= MIN_DETECTIONS_TO_SAVE and
+            now - self.last_save_time >= SAVE_INTERVAL_SECONDS):
+            # Save without blocking — langsung ke SQLAlchemy, tidak lewat HTTP
+            if self.save_task is None or self.save_task.done():
+                self.save_task = asyncio.create_task(
+                    save_detection_to_db(dets.copy(), self.frame_skip)
+                )
+                self.last_save_time = now
+
+        self.inference_count += 1
+        if now - self.last_infer_time >= 1.0:
+            self.current_infer_fps = self.inference_count / (now - self.last_infer_time)
+            self.inference_count = 0
+            self.last_infer_time = now
+
     async def recv(self) -> VideoFrame:
         frame: VideoFrame = await self.src.recv()
+        frame = self.drop_stale_frames() or frame
         img = frame.to_ndarray(format="bgr24")
 
         if self.size:
             img = cv2.resize(img, self.size, interpolation=cv2.INTER_LINEAR)
 
-        # Run inference
-        do_infer = (self.frame_skip % (self.skip_n + 1) == 0)
-        if do_infer:
+        # Ambil hasil inferensi yang sudah selesai
+        task = self.infer_task
+        if task is not None and task.done():
+            self.infer_task = None
             try:
-                dets = run_inference(img, self.conf, self.iou, self.max_det)
-                self.last_dets = dets
-
-                # Save detections to database periodically
-                now = time.time()
-                if (SAVE_DETECTIONS_ENABLED and
-                    len(dets) >= MIN_DETECTIONS_TO_SAVE and
-                    now - self.last_save_time >= SAVE_INTERVAL_SECONDS):
-                    # Save without blocking — langsung ke SQLAlchemy, tidak lewat HTTP
-                    if self.save_task is None or self.save_task.done():
-                        self.save_task = asyncio.create_task(
-                            save_detection_to_db(dets.copy(), self.frame_skip)
-                        )
-                        self.last_save_time = now
-
+                self.apply_detections(*task.result())
             except Exception as e:
                 logger.warning(f"Inference error: {e}")
-            finally:
-                self.inference_count += 1
-                now = time.time()
-                if now - self.last_infer_time >= 1.0:
-                    self.current_infer_fps = self.inference_count / (now - self.last_infer_time)
-                    self.inference_count = 0
-                    self.last_infer_time = now
+
+        # Mulai inferensi baru hanya bila thread sedang kosong — frame tidak pernah antre menunggu YOLO.
+        # Kotak deteksi tertinggal paling lama satu durasi inferensi dari video.
+        if self.infer_task is None and self.frame_skip % (self.skip_n + 1) == 0:
+            self.infer_task = asyncio.create_task(asyncio.to_thread(
+                timed_inference, img.copy(), self.conf, self.iou, self.max_det
+            ))
 
         self.frame_skip += 1
 
@@ -166,6 +208,12 @@ class RtspDetectionTrack(VideoStreamTrack):
             self.current_fps = self.frame_count / (now - self.last_fps_time)
             self.frame_count = 0
             self.last_fps_time = now
+        if now - self.last_stats_log >= STATS_LOG_SECONDS:
+            self.last_stats_log = now
+            logger.info(
+                f"Stream stats: fps={self.current_fps:.1f}, "
+                f"detections/s={self.current_infer_fps:.1f}, yolo={self.infer_ms:.0f}ms"
+            )
 
         device = get_device_info()
         cv2.putText(img, f"FPS: {self.current_fps:.1f}", (10, 30),
@@ -188,11 +236,13 @@ class RtspDetectionTrack(VideoStreamTrack):
         if self.recording and q is not None:
             try:
                 q.put_nowait((time.monotonic(), img.copy()))
+                self.recorded_frames += 1
             except queue.Full:
                 pass  # encoder tertinggal: frame dibuang, durasi tetap benar (pts jam dinding)
 
     def start_recording(self, filepath: str):
         self.frame_queue = queue.Queue(maxsize=RECORD_QUEUE_SIZE)
+        self.recorded_frames = 0
         self.writer_thread = threading.Thread(
             target=write_recording, args=(filepath, self.frame_queue), daemon=True
         )

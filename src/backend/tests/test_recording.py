@@ -71,3 +71,23 @@ def test_file_readable_without_stop(tmp_path):
 
 def test_stop_without_start_is_noop():
     assert RtspDetectionTrack(None).stop_recording() is True
+
+
+def test_recording_without_frames_is_not_saved(tmp_path, monkeypatch):
+    import asyncio
+    import video.recording as rec
+
+    async def must_not_save(**_):
+        raise AssertionError("rekaman kosong tidak boleh masuk DB")
+    monkeypatch.setattr(rec, "save_recording_to_db", must_not_save)
+
+    path = str(tmp_path / "empty.mp4")
+    track = RtspDetectionTrack(None)
+    track.start_recording(path)
+    rec.active_recordings["c1"] = {
+        "recording_id": "r1", "filename": "empty.mp4", "filepath": path, "track": track,
+        "start_time": rec.datetime.now(rec.JAKARTA_TZ), "session_id": "s1",
+    }
+    result = asyncio.run(rec.stop_recording("c1"))
+    assert result["saved"] is False
+    assert not os.path.exists(path)
