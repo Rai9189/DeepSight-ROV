@@ -18,7 +18,7 @@ from database.connection import get_db
 from database.models import AUVStatus, MonitoringSession
 from core.dependencies import get_current_user
 from core.cuid import generate_cuid
-from core.validation import safe_float
+from core.validation import safe_float, LIST_MAX_PAGE
 from core.timeutil import iso_utc
 
 logger = logging.getLogger("carter-backend")
@@ -67,7 +67,7 @@ def get_auv_status_list(
     GET list data navigasi AUV dengan pagination.
     """
     limit = min(max(limit, 1), 500)
-    offset = max(offset, 0)
+    offset = min(max(offset, 0), LIST_MAX_PAGE)
     query = db.query(AUVStatus)
 
     if session_id:

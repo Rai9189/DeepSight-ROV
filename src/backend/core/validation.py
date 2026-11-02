@@ -17,6 +17,7 @@ PASSWORD_MIN_LENGTH = 8
 # Download CSV di Analytics mengambil semua baris satu misi lewat limit=total
 # (misi 3 jam bisa puluhan ribu deteksi) — batas rendah memotong CSV diam-diam.
 LIST_MAX_LIMIT = 100_000
+LIST_MAX_PAGE = 1_000_000_000  # (page-1)*limit harus muat di BIGINT OFFSET MySQL
 
 
 def safe_str(value: Any, field_name: str) -> str:

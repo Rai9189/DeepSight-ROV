@@ -23,7 +23,7 @@ from database.connection import get_db
 from database.models import FishCount, MonitoringSession
 from core.dependencies import get_current_user
 from core.cuid import generate_cuid
-from core.validation import safe_int
+from core.validation import safe_int, LIST_MAX_PAGE
 from core.csv_export import csv_response
 from core.timeutil import iso_utc, local_str
 
@@ -277,7 +277,7 @@ def get_fish_counts(
     GET list fish counts dengan pagination dan filter opsional.
     """
     limit = min(max(limit, 1), 500)
-    page  = max(page, 1)
+    page  = min(max(page, 1), LIST_MAX_PAGE)
     skip  = (page - 1) * limit
     query = db.query(FishCount)
 
