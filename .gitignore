@@ -246,6 +246,14 @@ graphify-out/
 
 # Claude Code personal settings (hooks, local overrides)
 .claude/settings.local.json
+/CLAUDE.md
+
+# Playwright output
+/test-results/
+/playwright-report/
+/e2e/.auth/
 
 # Catatan progress pribadi (local only)
 catatan/
+/tasks/
+/docs/
