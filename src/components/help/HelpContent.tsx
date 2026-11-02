@@ -24,7 +24,19 @@ const FAQ: Array<{ group: string; items: Array<{ q: string; a: string }> }> = [
     items: [
       {
         q: 'Nothing appears after I press Start stream',
-        a: 'The detection feed needs the ROV camera. If “No video received” shows after 10 seconds, check that the ROV is on the same network and that MediaMTX is running, then press Stop and Start stream again. To test without the ROV, choose “This device” as the source in Stream settings.',
+        a: 'The detection feed needs the ROV camera. If “No video received” shows after 10 seconds, check that the ROV is on the same network and that MediaMTX is running, then press Stop and Start stream again. A mission that never received video is closed as Aborted instead of asking you to save it. To test without the ROV, choose “This device” as the source in Stream settings.',
+      },
+      {
+        q: 'What does Reconnect do?',
+        a: 'It reconnects the page to the stream server, for example after the backend was restarted. The status shows “Connecting…” and a message tells you whether it worked. It is disabled while streaming.',
+      },
+      {
+        q: 'What is the Raw camera preview?',
+        a: 'An extra view under the detection feed that shows the camera picture straight from MediaMTX, without AI boxes. Use it to check whether a problem comes from the camera or from the detection. It only shows while streaming.',
+      },
+      {
+        q: 'How do I report an error?',
+        a: 'Open System log at the bottom of the Live Stream page. It lists what the stream did, with errors in red. Copy the lines around the error, together with the time it happened, and send them to the team.',
       },
       {
         q: 'Is the mission video recorded?',
@@ -45,7 +57,11 @@ const FAQ: Array<{ group: string; items: Array<{ q: string; a: string }> }> = [
       },
       {
         q: 'Why was my mission marked Aborted?',
-        a: 'A mission that has had no stream for 10 minutes, or that is still running when the server restarts, is closed as Aborted. Its data is kept and still appears in Mission Report and Trends.',
+        a: 'A mission that never received video, that has had no stream for 10 minutes, or that is still running when the server restarts, is closed as Aborted. Its data is kept and still appears in Mission Report and Trends.',
+      },
+      {
+        q: 'How do I rename or delete a mission?',
+        a: 'Rename it with the pencil button on its recording in Recordings — admins and the person who ran the mission can do this. Admins can delete a whole mission with “Delete mission” in Mission Report. Deleting only a recording removes the video but keeps the mission report.',
       },
       {
         q: 'Can two missions run at the same time?',

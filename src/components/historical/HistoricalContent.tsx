@@ -164,7 +164,8 @@ export default function HistoricalContent() {
 
   const chartData = chronological.map(m => ({
     name: nameOf(m),
-    label: fmtShort(m.startTime),
+    // Date + start time: several missions on one day would otherwise share the same label
+    label: `${fmtShort(m.startTime)} · ${new Date(m.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`,
     ph: m.avgPh, do: m.avgDo, temp: m.avgTemp, tds: m.avgTds,
     ...Object.fromEntries(m.fish.map(f => [f.species, f.count])),
   }))
@@ -215,9 +216,9 @@ export default function HistoricalContent() {
         </div>
         {preset === 'custom' && (
           <div className="flex flex-wrap items-center gap-2">
-            <input type="date" aria-label="From" value={customFrom} max={customTo} onChange={e => setCustomFrom(e.target.value)} className={inputCls} />
+            <input type="date" aria-label="From" value={customFrom} max={customTo} onChange={e => setCustomFrom(e.target.value || localDay(new Date()))} className={inputCls} />
             <span className="text-sm text-gray-400">–</span>
-            <input type="date" aria-label="To" value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value)} className={inputCls} />
+            <input type="date" aria-label="To" value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value || localDay(new Date()))} className={inputCls} />
             {reversed && <span className="text-sm text-red-600">“From” must be on or before “To”</span>}
           </div>
         )}
