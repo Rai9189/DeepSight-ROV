@@ -59,3 +59,31 @@ test.describe('signed out', () => {
     await expect(alert).not.toContainText('[object');
   });
 });
+
+test('Ctrl+B collapses and expands the sidebar, but not while typing', async ({ page }) => {
+  await page.goto('/dashboard/users');
+  const sidebar = page.locator('aside');
+  const start = await sidebar.getAttribute('data-collapsed');
+  const other = start === 'true' ? 'false' : 'true';
+  await page.keyboard.press('Control+b');
+  await expect(sidebar).toHaveAttribute('data-collapsed', other);
+  await page.reload();
+  await expect(sidebar).toHaveAttribute('data-collapsed', other);
+  await page.getByPlaceholder('Search name or email').focus();
+  await page.keyboard.press('Control+b');
+  await expect(sidebar).toHaveAttribute('data-collapsed', other);
+  await page.locator('body').click({ position: { x: 600, y: 5 } });
+  await page.keyboard.press('Control+b');
+  await expect(sidebar).toHaveAttribute('data-collapsed', start!);
+});
+
+test('the new page content animates in after a page change, the header stays still', async ({ page }) => {
+  await page.goto('/dashboard');
+  await page.getByRole('link', { name: 'Recordings', exact: true }).click();
+  await expect(page).toHaveURL(/recordings/);
+  // The page's own <main> replaces Loading, so it must be the element carrying the animation
+  const pageMain = page.locator('.page-enter main').first();
+  await expect(pageMain).toBeVisible();
+  expect(await pageMain.evaluate(el => getComputedStyle(el).animationName)).toBe('page-enter');
+  expect(await page.locator('header').evaluate(el => getComputedStyle(el).animationName)).toBe('none');
+});

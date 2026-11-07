@@ -36,6 +36,19 @@ const Sidebar = ({ session, defaultCollapsed }: SidebarProps) => {
     document.cookie = `${SIDEBAR_COOKIE}=${isCollapsed ? 1 : 0}; path=/; max-age=31536000; samesite=lax`
   }, [isCollapsed])
 
+  // Ctrl+B (Cmd+B on Mac) toggles the sidebar, except while typing in a field
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'b') return
+      const el = e.target as HTMLElement | null
+      if (el?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el?.tagName ?? '')) return
+      e.preventDefault()
+      setIsCollapsed(c => !c)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const isActive = (href: string) =>
     href === '/dashboard' ? pathname === href : pathname.startsWith(href)
 
@@ -64,9 +77,10 @@ const Sidebar = ({ session, defaultCollapsed }: SidebarProps) => {
 
   return (
     <>
-      {isMobileOpen && (
-        <div className="fixed inset-0 bg-black/20 z-40 lg:hidden" onClick={() => setIsMobileOpen(false)} />
-      )}
+      {/* Always rendered so it can fade in step with the sliding sidebar */}
+      <div aria-hidden className={`fixed inset-0 bg-black/20 z-40 lg:hidden transition-opacity duration-200 ease-out ${
+        isMobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+      }`} onClick={() => setIsMobileOpen(false)} />
 
       {/* Mobile toggle button */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
@@ -83,6 +97,7 @@ const Sidebar = ({ session, defaultCollapsed }: SidebarProps) => {
         <div className={`flex h-16 flex-shrink-0 items-center border-b border-gray-200 ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-4'}`}>
           {isCollapsed ? (
             <button type="button" onClick={() => setIsCollapsed(false)} aria-label="Expand sidebar"
+              title="Expand sidebar (Ctrl+B)" aria-keyshortcuts="Control+B"
               className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300">
               <Anchor className="h-5 w-5 text-white" />
             </button>
@@ -92,7 +107,8 @@ const Sidebar = ({ session, defaultCollapsed }: SidebarProps) => {
                 <Anchor className="h-5 w-5 text-white" />
               </div>
               <span className="flex-1 truncate text-base font-semibold tracking-tight text-gray-900">Carter Island AUV</span>
-              <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(true)} aria-label="Collapse sidebar" className="hidden lg:flex h-8 w-8 text-gray-400">
+              <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(true)} aria-label="Collapse sidebar"
+                title="Collapse sidebar (Ctrl+B)" aria-keyshortcuts="Control+B" className="hidden lg:flex h-8 w-8 text-gray-400">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" onClick={() => setIsMobileOpen(false)} aria-label="Close menu" className="lg:hidden h-8 w-8 text-gray-400">

@@ -327,7 +327,7 @@ export default function HelpContent() {
                 <h3 className="text-xs font-medium text-gray-500">{group}</h3>
                 <div className="mt-1 divide-y divide-gray-100">
                   {items.map(({ q, a }) => (
-                    <details key={q} className="group">
+                    <details key={q} className="faq-item group">
                       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg py-2.5 text-sm font-medium text-gray-900 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 [&::-webkit-details-marker]:hidden">
                         <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
                         {q}

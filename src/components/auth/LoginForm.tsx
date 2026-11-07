@@ -78,7 +78,7 @@ export default function LoginForm() {
               </div>
 
               {error && (
-                <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+                <p role="alert" className="animate-in fade-in slide-in-from-bottom-1 duration-150 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
               )}
 
               <button type="submit" disabled={loading}

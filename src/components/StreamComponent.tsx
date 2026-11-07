@@ -13,6 +13,7 @@ import useSWR from 'swr'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 const IFRAME_PREVIEW_URL = process.env.NEXT_PUBLIC_STREAM_PREVIEW_URL || 'http://192.168.2.2:8889/cam/'
+const pressable = 'enabled:active:scale-[0.97] transition-[background-color,transform] duration-100'
 const API_WS_URL = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:8000'
 
 type ConnStatus = 'connecting' | 'disconnected' | 'connected' | 'error'
@@ -595,7 +596,7 @@ export default function StreamComponent() {
         />
       )}
 
-      <div className="px-4 py-4 lg:px-6 space-y-4">
+      <main className="px-4 py-4 lg:px-6 space-y-4">
 
         {/* ── Control bar ── */}
         <div className={card}>
@@ -629,7 +630,7 @@ export default function StreamComponent() {
                 }}
                 disabled={isStreaming || connStatus === 'connecting'}
                 title="Reconnect to the stream server"
-                className="h-9 px-3 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={`h-9 px-3 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed ${pressable}`}
               >
                 Reconnect
               </button>
@@ -637,14 +638,14 @@ export default function StreamComponent() {
                 <button
                   onClick={startStream}
                   disabled={connStatus !== 'connected'}
-                  className="h-9 px-4 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-500 text-white rounded-lg transition-colors"
+                  className={`h-9 px-4 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-500 text-white rounded-lg ${pressable}`}
                 >
                   Start stream
                 </button>
               ) : (
                 <button
                   onClick={stopStream}
-                  className="h-9 px-4 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                  className={`h-9 px-4 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg ${pressable}`}
                 >
                   Stop
                 </button>
@@ -666,8 +667,13 @@ export default function StreamComponent() {
               </span>
               <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${showSettings ? 'rotate-180' : ''}`} />
             </button>
-            {showSettings && (
-              <div className="flex flex-wrap items-end gap-4 pb-4">
+            <div
+              inert={!showSettings}
+              className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${showSettings ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+            >
+              {/* Negative margin leaves room for the focus rings the clip would cut */}
+              <div className="-mx-1 overflow-hidden px-1">
+              <div className="flex flex-wrap items-end gap-4 pb-4 pt-1">
                 <label className="space-y-1">
                   <span className="block text-xs font-medium text-gray-500">Source</span>
                   <select value={source} onChange={e => setSource(e.target.value as SourceMode)} disabled={isStreaming} className={selectCls}>
@@ -701,7 +707,8 @@ export default function StreamComponent() {
                 </label>
                 {isStreaming && <p className="pb-2 text-xs text-gray-500">Locked while streaming</p>}
               </div>
-            )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -719,7 +726,7 @@ export default function StreamComponent() {
             <div className="relative bg-gray-900 aspect-video">
               <video ref={remoteVideoRef} autoPlay playsInline onLoadedData={() => setHasVideo(true)} className="w-full h-full object-contain" />
               {noVideoWarning && (
-                <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-6 text-center">
+                <div role="alert" className="animate-in fade-in duration-200 absolute inset-0 flex flex-col items-center justify-center gap-1 px-6 text-center">
                   <span className="text-sm font-medium text-amber-300">No video received</span>
                   <span className="text-xs text-gray-400">
                     {source === 'server'
@@ -729,7 +736,7 @@ export default function StreamComponent() {
                 </div>
               )}
               {!isStreaming && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-6 text-center">
+                <div className="animate-in fade-in duration-200 absolute inset-0 flex flex-col items-center justify-center gap-1 px-6 text-center">
                   <span className="text-sm font-medium text-gray-300">No stream</span>
                   <span className="text-xs text-gray-500">
                     {connStatus === 'connected'
@@ -835,7 +842,7 @@ export default function StreamComponent() {
             )}
           </div>
           {showLogs && (
-            <div className="mx-5 mb-5 max-h-72 overflow-y-auto rounded-lg bg-gray-50 p-3 font-mono text-xs leading-relaxed">
+            <div className="mx-5 mb-5 max-h-72 overflow-y-auto rounded-lg bg-gray-50 p-3 font-mono text-xs leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
               {logs.length > 0 ? logs.map((l, i) => (
                 <div key={i} className={/fail|error|lost|didn't/i.test(l) ? 'text-red-600' : 'text-gray-700'}>{l}</div>
               )) : <div className="text-gray-400">No log entries</div>}
@@ -843,7 +850,7 @@ export default function StreamComponent() {
           )}
         </div>
 
-      </div>
+      </main>
     </div>
   )
 }
