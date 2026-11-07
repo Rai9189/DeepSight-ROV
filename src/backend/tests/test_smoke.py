@@ -179,6 +179,13 @@ def test_admin_role_lock_is_released(client, db, admin_h):
         assert c.execute(text("SELECT IS_FREE_LOCK('carter_admin_role')")).scalar() == 1
 
 
+def test_health_reports_rov_state(client, monkeypatch):
+    monkeypatch.setattr("core.scheduler._is_rov_online", True)
+    assert client.get("/api/health").json()["rov_online"] is True
+    monkeypatch.setattr("core.scheduler._is_rov_online", False)
+    assert client.get("/api/health").json()["rov_online"] is False
+
+
 def test_health_check_reuses_http_client(monkeypatch):
     """Client baru tiap cek memuat SSL ~200 ms di event loop dan membuat video patah tiap 5 dtk."""
     import httpx

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { ChevronDown, Settings2 } from 'lucide-react'
 import Header from '@/components/layout/Header'
+import RovStatus from '@/components/layout/RovStatus'
 import SensorCard from '@/components/dashboard/SensorCard'
 import { apiClient, isApiStatus } from '@/lib/api-client'
 import { getSpeciesColor, TARGET_SPECIES } from '@/lib/species'
@@ -580,7 +581,9 @@ export default function StreamComponent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="Live Stream" subtitle="Real-time camera feed and fish detection" />
+      <Header title="Live Stream" subtitle="Real-time camera feed and fish detection">
+        <RovStatus />
+      </Header>
 
       {showMissionSaveDialog && activeSession && (
         <MissionSaveDialog

@@ -22,6 +22,7 @@ from webrtc.peer_connection import (
 )
 from config import CORS_ORIGINS, YOLO_CONF_THRESHOLD
 from core.dependencies import get_current_user, get_user_from_token
+from core.scheduler import is_rov_online
 from database.connection import SessionLocal
 from core.system_metrics import get_cpu_percent, get_gpu_percent
 
@@ -76,6 +77,7 @@ def setup_routes(app: FastAPI):
             "model_loaded": get_model() is not None,
             "fps": fps,
             "inference_fps": inference_fps,
+            "rov_online": is_rov_online(),
         }
 
     @app.get("/api/performance")
