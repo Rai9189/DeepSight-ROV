@@ -28,7 +28,18 @@ test('All counts every mission in the database', async ({ page, request }) => {
 
 test('Help covers Reconnect, preview, System log, rename and delete', async ({ page }) => {
   await page.goto('/dashboard/help');
+  // English by default like the rest of the app; the switch sits in the header
+  const header = page.locator('header');
+  await expect(header.getByRole('button', { name: 'EN', exact: true })).toHaveAttribute('aria-pressed', 'true', { timeout: 30_000 });
   for (const text of ['What does Reconnect do?', 'What is the Raw camera preview?', 'System log', 'How do I rename or delete a mission?']) {
-    await expect(page.getByText(text).first()).toBeAttached({ timeout: 30_000 });
+    await expect(page.getByText(text).first()).toBeAttached();
   }
+  await header.getByRole('button', { name: 'ID', exact: true }).click();
+  for (const text of ['Apa fungsi Reconnect?', 'Apa itu Raw camera preview?', 'System log', 'Bagaimana cara mengganti nama atau menghapus misi?']) {
+    await expect(page.getByText(text).first()).toBeAttached();
+  }
+  await expect(header.getByText('Cara menjalankan misi dan membaca hasilnya')).toBeVisible();
+  // The choice is remembered
+  await page.reload();
+  await expect(page.getByText('Apa fungsi Reconnect?')).toBeAttached({ timeout: 30_000 });
 });
