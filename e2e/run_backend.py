@@ -94,6 +94,7 @@ mission("Misi Hapus", admin, 4)
 mission("Misi File Hilang", admin, 5, keep_file=False)
 mission("<img src=x onerror=window.__xss=1>", admin, 6)
 mission("W" * 255, admin, 7)
+mission("Misi Tanpa Rekaman", admin, 8, recording=False)
 big = mission("Misi Besar", admin, 30, minutes=480)
 
 # Bulk data: an 8-hour mission with 20,000 rows of each kind, plus 600 older missions

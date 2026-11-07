@@ -138,6 +138,7 @@ export default function AnalyticsContent() {
   const selectedId = urlId ?? lastId
   const isAdmin = useCurrentUser()?.role === 'ADMIN'
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleteText, setDeleteText] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
 
   const { data: sessionsData, error: sessionsError, isLoading: sessionsLoading, mutate: mutateSessions } = useSWR('/api/analytics/sessions', fetcher, { refreshInterval: 30000 })
@@ -162,6 +163,9 @@ export default function AnalyticsContent() {
   const telemetryTotal: number = (telemetryListData as any)?.pagination?.total ?? telemetryList.length
   // ponytail: links the newest recording only; a mission with several recordings shows the rest in Recordings
   const recording = (recordingData as any)?.data?.[0]
+  // A recording is lost for good on delete, so ask for a typed confirmation; unknown (still loading / failed) counts as yes
+  const mustType = recordingData === undefined || !!recording
+  const canDelete = !mustType || deleteText.trim().toLowerCase() === 'delete'
 
   if (sessionsLoading) {
     return (
@@ -296,7 +300,7 @@ export default function AnalyticsContent() {
             )}
             {isAdmin && !isLive && (
               <button
-                onClick={() => setConfirmingDelete(true)}
+                onClick={() => { setDeleteText(''); setConfirmingDelete(true) }}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-100"
               >
                 <Trash2 className="h-3.5 w-3.5" /> Delete mission
@@ -470,9 +474,25 @@ export default function AnalyticsContent() {
             <DialogTitle className="text-base font-semibold">Delete mission?</DialogTitle>
             <DialogDescription>
               <span className="font-medium text-gray-900">{session.locationName || 'Untitled mission'}</span> will be removed with all its
-              sensor readings, fish detections and recordings. This can&apos;t be undone.
+              sensor readings{mustType ? ', fish detections and recordings' : ' and fish detections'}. This can&apos;t be undone.
             </DialogDescription>
           </DialogHeader>
+          {mustType && (
+            <form onSubmit={e => { e.preventDefault(); if (canDelete && !isDeleting) deleteMission() }} className="space-y-2">
+              <label htmlFor="confirm-delete" className="block text-sm text-gray-700">
+                This mission still has a recording. Type <span className="font-mono font-semibold text-gray-900">delete</span> to confirm.
+              </label>
+              <input
+                id="confirm-delete"
+                value={deleteText}
+                onChange={e => setDeleteText(e.target.value)}
+                disabled={isDeleting}
+                autoComplete="off"
+                autoFocus
+                className="h-9 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
+              />
+            </form>
+          )}
           <DialogFooter>
             <button
               onClick={() => setConfirmingDelete(false)}
@@ -483,7 +503,7 @@ export default function AnalyticsContent() {
             </button>
             <button
               onClick={deleteMission}
-              disabled={isDeleting}
+              disabled={isDeleting || !canDelete}
               className="h-9 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-70"
             >
               {isDeleting ? 'Deleting…' : 'Delete mission'}

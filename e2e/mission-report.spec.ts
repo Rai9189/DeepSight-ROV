@@ -32,7 +32,16 @@ test.describe('as an admin', () => {
   test('a deleted mission leaves the list, Recordings and Trends', async ({ page, request }) => {
     await pick(page, 'Misi Hapus');
     await page.getByRole('button', { name: 'Delete mission' }).click();
-    await page.getByRole('dialog', { name: 'Delete mission?' }).getByRole('button', { name: 'Delete mission' }).click();
+    // It still has a recording, so "delete" must be typed first
+    const dialog = page.getByRole('dialog', { name: 'Delete mission?' });
+    const confirm = dialog.getByRole('button', { name: 'Delete mission' });
+    const box = dialog.getByLabel(/Type delete to confirm/);
+    await expect(confirm).toBeDisabled();
+    await box.fill('hapus');
+    await expect(confirm).toBeDisabled();
+    await box.fill(' Delete ');
+    await expect(confirm).toBeEnabled();
+    await box.press('Enter');
     await expect(page.getByText('Mission deleted')).toBeVisible();
 
     const names = (await (await request.get(`${API}/api/analytics/sessions`)).json()).data.map((m: { locationName: string }) => m.locationName);
@@ -71,6 +80,16 @@ test.describe('as an admin', () => {
     const file = await download;
     test.info().annotations.push({ type: 'perf', description: `Excel 20.000 baris: ${Date.now() - started} ms` });
     expect(await file.path()).toBeTruthy();
+  });
+
+  test('a mission without a recording is deleted with one click', async ({ page }) => {
+    await pick(page, 'Misi Tanpa Rekaman');
+    await page.getByRole('button', { name: 'Delete mission' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Delete mission?' });
+    await expect(dialog.getByRole('textbox')).toHaveCount(0);
+    await expect(dialog).not.toContainText('recordings');
+    await dialog.getByRole('button', { name: 'Delete mission' }).click();
+    await expect(page.getByText('Mission deleted')).toBeVisible();
   });
 
   test('a bad ?session falls back to a real mission', async ({ page }) => {
