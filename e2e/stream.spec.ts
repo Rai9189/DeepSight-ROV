@@ -18,6 +18,10 @@ test('a mission with video is streamed, saved and recorded', async ({ page }) =>
   const mission = `Survei ${Date.now()}`;
 
   await openStream(page);
+  // No placeholder species: the model only reports "ikan", so a list of names would swap out mid-stream
+  const fishCard = page.getByTestId('fish-card');
+  await expect(fishCard.getByText('No fish detected yet')).toBeVisible();
+  await expect(fishCard.getByText('Kerapu')).toHaveCount(0);
   await page.getByRole('button', { name: 'Start stream' }).click();
   await expectVideoPlaying(page);
 

@@ -116,6 +116,38 @@ test('five tabs stream at once and every video plays', async ({ context, request
   await expect.poll(() => peerCount(request), { timeout: 30_000 }).toBe(0);
 });
 
+test('recent detections fill the card when the raw preview opens', async ({ page }) => {
+  stopVideo = await startVideo();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route('**/api/detections?*', async route => {
+    const response = await route.fetch();
+    const row = { detectedAt: new Date().toISOString(), speciesName: 'Kerapu', confidence: 0.9, frameNumber: 1 };
+    await route.fulfill({ response, json: { ...(await response.json()), data: Array.from({ length: 40 }, () => row) } });
+  });
+  await openStream(page);
+  await startAndPlay(page);
+  const list = page.getByTestId('recent-detections');
+  await expect(list).toBeVisible({ timeout: 30_000 });
+  // Measured in one tick: the page shifts while the stream settles
+  const box = () => page.evaluate(() => {
+    const card = document.querySelector('[data-testid="fish-card"]')!;
+    const left = card.previousElementSibling!;
+    return {
+      gap: Math.abs(card.getBoundingClientRect().bottom - left.getBoundingClientRect().bottom),
+      listHeight: document.querySelector('[data-testid="recent-detections"]')!.getBoundingClientRect().height,
+    };
+  });
+
+  await expect.poll(async () => (await box()).gap).toBeLessThan(2);
+  const closed = await box();
+
+  await page.getByRole('button', { name: 'Raw camera preview' }).click();
+  await expect.poll(async () => (await box()).listHeight).toBeGreaterThan(closed.listHeight + 200);
+  expect((await box()).gap).toBeLessThan(2);
+
+  await stopAndSave(page, `Daftar Penuh ${Date.now()}`);
+});
+
 test('two operators on one mission: neither loses the save', async ({ browser, page }) => {
   stopVideo = await startVideo();
   await openStream(page);

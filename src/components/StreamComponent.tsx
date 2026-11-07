@@ -7,7 +7,7 @@ import Header from '@/components/layout/Header'
 import RovStatus from '@/components/layout/RovStatus'
 import SensorCard from '@/components/dashboard/SensorCard'
 import { apiClient, isApiStatus } from '@/lib/api-client'
-import { getSpeciesColor, TARGET_SPECIES } from '@/lib/species'
+import { getSpeciesColor } from '@/lib/species'
 import { WATER_RANGES, SENSOR_LIMITS, getPhStatus, getDoStatus, getTempStatus, getTdsStatus, isDepthNearLimit } from '@/lib/water-quality'
 import useSWR from 'swr'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -251,7 +251,7 @@ export default function StreamComponent() {
       try {
         const [fishData, detData] = await Promise.all([
           apiClient.get<any>(`/api/fish-counts/session/${activeSession.id}`),
-          apiClient.get<any>(`/api/detections?session_id=${activeSession.id}&limit=20`),
+          apiClient.get<any>(`/api/detections?session_id=${activeSession.id}&limit=40`),
         ])
         if (fishData?.data?.counts) setSpeciesCounts(fishData.data.counts)
         if (Array.isArray(detData?.data)) {
@@ -768,14 +768,14 @@ export default function StreamComponent() {
           </div>
 
           {/* Fish count + recent detections */}
-          <div className={`${card} p-5 flex flex-col`}>
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-base font-semibold text-gray-900">Fish counted</h2>
-              <span className="text-xs text-gray-500">Most seen at once, this mission</span>
-            </div>
+          <div data-testid="fish-card" className={`${card} p-5 flex flex-col ${showPreview && detectionLogs.length === 0 ? 'lg:self-start' : ''}`}>
+            <h2 className="text-base font-semibold text-gray-900">Fish counted</h2>
+            <p className="text-xs text-gray-500">Most seen at once, this mission</p>
             <p className="mt-2 text-4xl font-semibold tracking-tight text-gray-900">{totalFish}</p>
+            {/* Only labels the AI really reports: a placeholder species list switched to "ikan" mid-stream */}
+            {speciesCounts.length === 0 ? <p className="mt-4 text-sm text-gray-500">No fish detected yet</p> : (
             <div className="mt-4 space-y-2.5">
-              {(speciesCounts.length > 0 ? speciesCounts : TARGET_SPECIES.map(n => ({ speciesName: n, totalCount: 0 }))).map((s, i) => (
+              {speciesCounts.map((s, i) => (
                 <div key={s.speciesName} className="text-sm">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-2 text-gray-700">
@@ -790,21 +790,25 @@ export default function StreamComponent() {
                 </div>
               ))}
             </div>
+            )}
 
             <h3 className="mt-6 text-sm font-semibold text-gray-900">Recent detections</h3>
             {detectionLogs.length > 0 ? (
-              <ul className="mt-2 flex-1 divide-y divide-gray-100 overflow-y-auto text-sm max-h-64">
-                {detectionLogs.slice(0, 10).map((log, i) => (
-                  <li key={i} className="flex items-center gap-3 py-2">
-                    <span className="text-xs text-gray-500">{log.time}</span>
-                    <span className="flex min-w-0 flex-1 items-center gap-1.5 text-gray-700">
-                      <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: getSpeciesColor(log.species) }} />
-                      <span className="truncate">{log.species}</span>
-                    </span>
-                    <span className="text-xs font-medium text-gray-900">{(log.confidence * 100).toFixed(0)}%</span>
-                  </li>
-                ))}
-              </ul>
+              // Absolute on desktop so the list fills the card without making the row taller
+              <div className="relative mt-2 flex-1 lg:min-h-64">
+                <ul data-testid="recent-detections" className="max-h-64 divide-y divide-gray-100 overflow-y-auto text-sm lg:absolute lg:inset-0 lg:max-h-none">
+                  {detectionLogs.map((log, i) => (
+                    <li key={i} className="flex items-center gap-3 py-2">
+                      <span className="text-xs text-gray-500">{log.time}</span>
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-gray-700">
+                        <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: getSpeciesColor(log.species) }} />
+                        <span className="truncate">{log.species}</span>
+                      </span>
+                      <span className="text-xs font-medium text-gray-900">{(log.confidence * 100).toFixed(0)}%</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : (
               <p className="mt-2 text-sm text-gray-500">{isStreaming ? 'No fish detected yet.' : 'Detections appear here while streaming.'}</p>
             )}

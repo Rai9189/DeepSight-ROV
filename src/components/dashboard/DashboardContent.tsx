@@ -254,12 +254,10 @@ export default function DashboardContent() {
           </div>
         ) : (
           <div className={`lg:col-span-2 ${card} p-5 flex flex-col`}>
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="text-base font-semibold text-gray-900">Dive profile</h2>
-              <p className="text-sm text-gray-500">
-                {maxDepth != null ? `Max ${maxDepth.toFixed(1)} m · Avg ${avgDepth!.toFixed(1)} m` : ''}
-              </p>
-            </div>
+            <h2 className="text-base font-semibold text-gray-900">Dive profile</h2>
+            {maxDepth != null && (
+              <p className="text-xs text-gray-500">Max {maxDepth.toFixed(1)} m · Avg {avgDepth!.toFixed(1)} m</p>
+            )}
             {chartData.length > 1 ? (
               <div className="mt-3 min-h-48 flex-1">{/* grows to match the Species card */}
                 <ResponsiveContainer width="100%" height="100%">
