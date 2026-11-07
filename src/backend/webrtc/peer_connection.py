@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import Dict, Optional, Tuple
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection, RTCRtpSender, RTCSessionDescription
 from aiortc.contrib.media import MediaPlayer
 
 from config import (
@@ -22,6 +22,19 @@ peer_connections: Dict[str, RTCPeerConnection] = {}
 detection_tracks: Dict[str, RtspDetectionTrack] = {}
 bitrate_tasks: Dict[str, asyncio.Task] = {}
 media_players: Dict[str, MediaPlayer] = {}
+
+
+def prefer_codec(transceiver, codec: str) -> None:
+    """
+    Dahulukan codec pilihan (h264/vp8) untuk transceiver ini. Harus dipanggil sebelum
+    setRemoteDescription: aiortc memilih encoder dari urutan ini, bukan dari teks SDP jawaban.
+    Codec lain tetap ada sebagai cadangan bila browser tidak mendukung pilihan.
+    """
+    caps = RTCRtpSender.getCapabilities("video").codecs
+    mime = f"video/{codec}".lower()
+    transceiver.setCodecPreferences(
+        [c for c in caps if c.mimeType.lower() == mime] + [c for c in caps if c.mimeType.lower() != mime]
+    )
 
 
 def _stop_player(player: MediaPlayer) -> None:
@@ -81,6 +94,7 @@ async def handle_offer(websocket, client_id: str, message: dict):
     detection_tracks[client_id] = det_track
 
     sender = pc.addTrack(det_track)
+    prefer_codec(next(t for t in pc.getTransceivers() if t.sender is sender), pref_codec)
 
     @pc.on("connectionstatechange")
     async def _on_state():

@@ -31,15 +31,16 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from config import (
     BASE_STATION_URL, BASE_STATION_SYNC_TOKEN, SYNC_INTERVAL_SECONDS, STALE_SESSION_MINUTES,
+    RASPI_TELEMETRY_URL, MEDIAMTX_URL,
 )
 from core.validation import safe_float
 
 logger = logging.getLogger("carter-backend")
 
-# URL Raspberry Pi dan MediaMTX
-RASPI_TELEMETRY_URL = "http://192.168.2.2:14552/telemetry"
-MEDIAMTX_URL        = "http://192.168.2.2:8889/cam/"
 HEALTH_CHECK_TIMEOUT = 1.5  # detik per cek; terukur ~3.6 dtk total saat Raspi offline (< interval 5 dtk)
+# Satu client dipakai ulang: membuat AsyncClient baru memuat sertifikat SSL ~200 ms di event loop,
+# yang tiap 5 dtk membekukan stream video (terukur py-spy 2026-11-07).
+_http = httpx.AsyncClient(timeout=HEALTH_CHECK_TIMEOUT)
 
 # Singleton scheduler
 scheduler = AsyncIOScheduler(timezone="Asia/Jakarta")
@@ -96,14 +97,12 @@ async def health_check_job():
 
     # ── Cek 1: Telemetri navigasi dari Raspberry Pi ──
     try:
-        async with httpx.AsyncClient(timeout=HEALTH_CHECK_TIMEOUT) as client:
-            response = await client.get(RASPI_TELEMETRY_URL)
-
-            if response.is_success:
-                data = response.json()
-                if isinstance(data, dict):
-                    telemetry_data = data
-                    is_online = all(k in data for k in ("attitude", "compass"))
+        response = await _http.get(RASPI_TELEMETRY_URL)
+        if response.is_success:
+            data = response.json()
+            if isinstance(data, dict):
+                telemetry_data = data
+                is_online = all(k in data for k in ("attitude", "compass"))
 
     except (httpx.ConnectError, httpx.TimeoutException):
         pass
@@ -113,10 +112,9 @@ async def health_check_job():
     # ── Cek 2: MediaMTX fallback ──
     if not is_online:
         try:
-            async with httpx.AsyncClient(timeout=HEALTH_CHECK_TIMEOUT) as client:
-                response = await client.head(MEDIAMTX_URL)
-                if response.is_success:
-                    is_online = True
+            response = await _http.head(MEDIAMTX_URL)
+            if response.is_success:
+                is_online = True
         except (httpx.ConnectError, httpx.TimeoutException):
             pass
         except Exception as e:

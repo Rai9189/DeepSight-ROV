@@ -43,13 +43,16 @@ def init_sync_sender(base_station_url: str, token: str):
     logger.info(f"Sync sender initialized — target: {BASE_STATION_URL}")
 
 
+# Dipakai ulang; membuat client baru tiap kirim memuat sertifikat SSL ~200 ms di event loop.
+_http = httpx.AsyncClient(timeout=10.0)
+
+
 async def _post(path: str, payload: dict) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        return await client.post(
-            f"{BASE_STATION_URL}{path}",
-            json=payload,
-            headers={"Authorization": f"Bearer {BASE_STATION_TOKEN}"},
-        )
+    return await _http.post(
+        f"{BASE_STATION_URL}{path}",
+        json=payload,
+        headers={"Authorization": f"Bearer {BASE_STATION_TOKEN}"},
+    )
 
 
 def _session_record(s) -> dict:

@@ -179,6 +179,24 @@ def test_admin_role_lock_is_released(client, db, admin_h):
         assert c.execute(text("SELECT IS_FREE_LOCK('carter_admin_role')")).scalar() == 1
 
 
+def test_health_check_reuses_http_client(monkeypatch):
+    """Client baru tiap cek memuat SSL ~200 ms di event loop dan membuat video patah tiap 5 dtk."""
+    import httpx
+    import core.scheduler as sch
+
+    class Offline:
+        async def get(self, url): raise httpx.ConnectError("offline")
+        async def head(self, url): raise httpx.ConnectError("offline")
+
+    def no_new_client(*a, **k): raise AssertionError("health check membuat AsyncClient baru")
+    monkeypatch.setattr(sch, "_http", Offline())
+    monkeypatch.setattr(httpx, "AsyncClient", no_new_client)
+    monkeypatch.setattr(sch, "_is_rov_online", True)
+    for _ in range(3):
+        asyncio.run(sch.health_check_job())
+    assert sch._is_rov_online is False
+
+
 def test_auth_releases_db_connection(db, admin_h):
     # Koneksi yang tertahan setelah auth membuat 71+ request serentak saling menunggu
     user = get_user_from_token(admin_h["Authorization"].split()[1], db)
@@ -326,3 +344,26 @@ def test_rename_finished_mission(client, db, admin, admin_h, user_h):
     r = client.patch(url, json={"locationName": "Survei Pantai — Carter"}, headers=admin_h)
     assert r.status_code == 200 and r.json()["data"]["locationName"] == "Survei Pantai — Carter"
     assert r.json()["data"]["status"] == "Completed"  # rename tidak mengubah status
+
+
+@pytest.mark.parametrize("codec", ["h264", "vp8"])
+def test_stream_uses_chosen_codec(codec):
+    """Pilihan codec di Stream settings dulu diabaikan: encoder selalu mengikuti urutan offer browser."""
+    from aiortc import RTCPeerConnection, RTCSessionDescription
+    from aiortc.mediastreams import VideoStreamTrack
+    from webrtc.peer_connection import prefer_codec
+
+    async def negotiate():
+        browser, server = RTCPeerConnection(), RTCPeerConnection()
+        browser.addTransceiver("video", direction="recvonly")
+        await browser.setLocalDescription(await browser.createOffer())
+        sender = server.addTrack(VideoStreamTrack())
+        tr = next(t for t in server.getTransceivers() if t.sender is sender)
+        prefer_codec(tr, codec)
+        await server.setRemoteDescription(RTCSessionDescription(sdp=browser.localDescription.sdp, type="offer"))
+        await server.setLocalDescription(await server.createAnswer())
+        first = tr._codecs[0].mimeType.lower()
+        await browser.close(); await server.close()
+        return first
+
+    assert asyncio.run(negotiate()) == f"video/{codec}"

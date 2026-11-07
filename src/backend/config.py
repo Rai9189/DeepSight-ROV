@@ -7,6 +7,8 @@ load_dotenv()
 # Streaming / Encoder Settings
 # ==========================
 RTSP_URL = os.getenv("RTSP_URL", "rtsp://192.168.2.2:8554/cam")
+RASPI_TELEMETRY_URL = os.getenv("RASPI_TELEMETRY_URL", "http://192.168.2.2:14552/telemetry")
+MEDIAMTX_URL = os.getenv("MEDIAMTX_URL", "http://192.168.2.2:8889/cam/")
 RTSP_TRANSPORT = os.getenv("RTSP_TRANSPORT", "udp")
 TARGET_FPS = int(os.getenv("TARGET_FPS", "30"))
 RESIZE_WIDTH = int(os.getenv("RESIZE_WIDTH", "854"))
