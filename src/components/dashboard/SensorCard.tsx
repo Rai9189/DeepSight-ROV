@@ -5,7 +5,7 @@ export default function SensorCard({ label, value, unit, status, hint, range }: 
   label: string
   value: number | null | undefined
   unit: string
-  status?: (v: number) => WaterStatus
+  status?: (v: number) => WaterStatus | null
   hint?: string
   // Lowest/highest reading behind an average; an out-of-range extreme gets its status colour
   range?: { min: number; max: number }
@@ -35,7 +35,7 @@ export default function SensorCard({ label, value, unit, status, hint, range }: 
         <p className="mt-1 text-xs text-gray-500">
           {(['min', 'max'] as const).map((k, i) => {
             const v = range[k]
-            const tone = status?.(v).tone
+            const tone = status?.(v)?.tone
             return (
               <span key={k}>
                 {i > 0 && ' · '}{k}{' '}

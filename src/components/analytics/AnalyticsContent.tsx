@@ -10,7 +10,7 @@ import { BarChart3, Download, Play, Trash2 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { downloadXlsx } from '@/lib/xlsx-export'
 import { getSpeciesColor } from '@/lib/species'
-import { TONE, WATER_RANGES, getPhStatus, getDoStatus, getTempStatus, type WaterStatus } from '@/lib/water-quality'
+import { TONE, WATER_RANGES, getPhStatus, getDoStatus, getTempStatus, getTdsStatus, type WaterStatus } from '@/lib/water-quality'
 import SensorCard from '@/components/dashboard/SensorCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import MissionPicker from '@/components/analytics/MissionPicker'
@@ -379,8 +379,7 @@ export default function AnalyticsContent() {
           {telemetry ? (
             <>
               <SensorCard label="pH" value={hasTelemetry ? s.avgPh : null} range={rangeOf('Ph')} unit="pH" status={getPhStatus} />
-              {/* TDS status hidden until the team sets seawater thresholds (old 200–500 ppm = freshwater) */}
-              <SensorCard label="TDS" value={hasTelemetry ? s.avgTds : null} range={rangeOf('Tds')} unit="ppm" />
+              <SensorCard label="TDS" value={hasTelemetry ? s.avgTds : null} range={rangeOf('Tds')} unit="ppm" status={getTdsStatus} />
               <SensorCard label="Dissolved oxygen" value={hasTelemetry ? s.avgDo : null} range={rangeOf('Do')} unit="mg/L" status={getDoStatus} />
               <SensorCard label="Water temperature" value={hasTelemetry ? s.avgTemp : null} range={rangeOf('Temp')} unit="°C" status={getTempStatus} />
             </>

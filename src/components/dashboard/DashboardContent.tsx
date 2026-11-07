@@ -7,7 +7,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, AreaChart, Area, XAx
 import { Anchor, ChevronRight } from 'lucide-react'
 import { apiClient, isApiStatus } from '@/lib/api-client'
 import { getSpeciesColor } from '@/lib/species'
-import { getPhStatus, getDoStatus, getTempStatus } from '@/lib/water-quality'
+import { getPhStatus, getDoStatus, getTempStatus, getTdsStatus } from '@/lib/water-quality'
 import SensorCard from '@/components/dashboard/SensorCard'
 
 const fetcher = apiClient.swrFetcher
@@ -239,8 +239,7 @@ export default function DashboardContent() {
       {!hasSensorData && !isLive ? null : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <SensorCard label={`${avg}pH`} value={water.ph} unit="pH" status={getPhStatus} />
-          {/* TDS status hidden until the team sets seawater thresholds (old 200–500 ppm = freshwater) */}
-          <SensorCard label={`${avg}TDS`} value={water.tds} unit="ppm" />
+          <SensorCard label={`${avg}TDS`} value={water.tds} unit="ppm" status={getTdsStatus} />
           <SensorCard label={`${avg}dissolved oxygen`} value={water.do} unit="mg/L" status={getDoStatus} />
           <SensorCard label={`${avg}water temperature`} value={water.temp} unit="°C" status={getTempStatus} />
         </div>

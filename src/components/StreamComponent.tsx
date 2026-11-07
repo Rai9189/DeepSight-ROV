@@ -8,7 +8,7 @@ import RovStatus from '@/components/layout/RovStatus'
 import SensorCard from '@/components/dashboard/SensorCard'
 import { apiClient, isApiStatus } from '@/lib/api-client'
 import { getSpeciesColor, TARGET_SPECIES } from '@/lib/species'
-import { WATER_RANGES, getPhStatus, getDoStatus, getTempStatus } from '@/lib/water-quality'
+import { WATER_RANGES, SENSOR_LIMITS, getPhStatus, getDoStatus, getTempStatus, getTdsStatus, isDepthNearLimit } from '@/lib/water-quality'
 import useSWR from 'swr'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
@@ -571,7 +571,7 @@ export default function StreamComponent() {
   }[connStatus]
 
   const chips = isStreaming ? [
-    auv?.depth != null && `Depth ${auv.depth.toFixed(1)} m`,
+    auv?.depth != null && `Depth ${auv.depth.toFixed(1)} m${isDepthNearLimit(auv.depth) ? ' · near sensor limit' : ''}`,
     perfData?.fps != null && `FPS ${perfData.fps.toFixed(0)}`,
     inferenceMs != null && `Inference ${inferenceMs.toFixed(0)} ms`,
     modelInfo?.conf_threshold != null && `Conf ≥ ${modelInfo.conf_threshold}`,
@@ -814,8 +814,7 @@ export default function StreamComponent() {
         {/* ── Water quality ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SensorCard label="pH" value={telemetry?.phLevel} unit="pH" status={getPhStatus} hint={`Normal ${WATER_RANGES.ph.text}`} />
-          {/* TDS status hidden until the team sets seawater thresholds */}
-          <SensorCard label="TDS" value={telemetry?.tdsValue} unit="ppm" />
+          <SensorCard label="TDS" value={telemetry?.tdsValue} unit="ppm" status={getTdsStatus} hint={`Sensor limit ${SENSOR_LIMITS.tds.toLocaleString('en-US')} ppm`} />
           <SensorCard label="Dissolved oxygen" value={telemetry?.dissolvedOxygen} unit="mg/L" status={getDoStatus} hint={`Normal ${WATER_RANGES.do.text}`} />
           <SensorCard label="Water temperature" value={telemetry?.waterTemp} unit="°C" status={getTempStatus} hint={`Normal ${WATER_RANGES.temp.text}`} />
         </div>
