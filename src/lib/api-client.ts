@@ -51,6 +51,8 @@ export const tokenStorage = {
     if (typeof window === 'undefined') return
     localStorage.removeItem(LEGACY_TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    // Per-account UI state (e.g. the last mission opened) must not carry over to the next login
+    sessionStorage.clear()
   },
 }
 
@@ -134,7 +136,9 @@ export const isApiStatus = (err: unknown, status: number): boolean =>
 
 async function throwApiError(res: Response): Promise<never> {
   const err = await res.json().catch(() => ({ error: res.statusText }))
-  throw new ApiError(err.error || err.detail || `Request gagal: ${res.status}`, res.status)
+  // FastAPI validation errors (422) send `detail` as a list of objects, not text
+  const detail = Array.isArray(err.detail) ? err.detail[0]?.msg : err.detail
+  throw new ApiError(err.error || detail || `Request gagal: ${res.status}`, res.status)
 }
 
 // ==============================

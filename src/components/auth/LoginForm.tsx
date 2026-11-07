@@ -32,6 +32,8 @@ export default function LoginForm() {
     } catch (err: unknown) {
       setError(isApiStatus(err, 401)
         ? 'Invalid email or password'
+        // 422: the browser accepted the email (e.g. "a@b") but the backend did not
+        : isApiStatus(err, 422) ? 'Enter a valid email address'
         : err instanceof ApiError ? err.message : 'Cannot reach the server. Check your connection and try again.')
       setLoading(false)
     }

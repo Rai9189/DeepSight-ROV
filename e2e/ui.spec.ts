@@ -44,3 +44,18 @@ test('recording videos offer no picture in picture', async ({ page }) => {
   const player = page.getByRole('dialog').locator('video');
   expect(await player.evaluate(v => (v as HTMLVideoElement).disablePictureInPicture)).toBe(true);
 });
+
+test.describe('signed out', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  // The browser accepts "a@b" but the backend answers 422 with a list, which used to print [object Object]
+  test('an email the backend rejects shows a readable message', async ({ page }) => {
+    await page.goto('/auth/login');
+    await page.getByLabel('Email').fill('a@b');
+    await page.getByPlaceholder('Enter your password').fill('wrong-password');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    const alert = page.getByRole('alert').filter({ hasText: /./ });  // skip Next's empty route announcer
+    await expect(alert).toHaveText('Enter a valid email address', { timeout: 15_000 });
+    await expect(alert).not.toContainText('[object');
+  });
+});

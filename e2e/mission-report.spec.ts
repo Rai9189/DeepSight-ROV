@@ -79,3 +79,23 @@ test.describe('as an admin', () => {
     await expect(page.getByText('No missions yet')).toHaveCount(0);
   });
 });
+
+test.describe('switching accounts', () => {
+  test.use({ storageState: 'e2e/.auth/admin.json' });
+
+  test("the admin's last mission is forgotten after logging in as a user", async ({ page }) => {
+    test.setTimeout(120_000);
+    await pick(page, 'Misi Rename');
+    expect(await page.evaluate(() => sessionStorage.getItem('mission-report:last'))).not.toBeNull();
+
+    await page.getByRole('button', { name: 'Account menu' }).click();
+    await page.getByRole('menuitem', { name: 'Log out' }).click();
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 30_000 });
+    await page.getByLabel('Email').fill('user@tes.com');
+    await page.getByPlaceholder('Enter your password').fill('rahasia88');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 60_000 });
+
+    expect(await page.evaluate(() => sessionStorage.getItem('mission-report:last'))).toBeNull();
+  });
+});
