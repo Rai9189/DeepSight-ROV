@@ -29,8 +29,9 @@ export default defineConfig({
       timeout: 120_000, // YOLO model load
     },
     {
-      // E2E_PROD=1 tests the last `npm run build`: only production prefetches loading.tsx
-      command: process.env.E2E_PROD ? 'npm run start' : 'npm run dev',
+      // Tests the last `npm run build`: only production prefetches loading.tsx.
+      // E2E_DEV=1 uses the dev server instead, where the Loading test fails.
+      command: process.env.E2E_DEV ? 'npm run dev' : 'npm run start',
       url: 'http://localhost:3000/auth/login',
       timeout: 120_000,
       env: {
