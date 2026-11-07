@@ -4,10 +4,13 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import text
 
 from config import RECORDINGS_DIR
+from core.dependencies import get_user_from_token
+from database.connection import engine
 from database.models import (
-    MonitoringSession, SessionStatus, Telemetry, AUVStatus, Detection, FishCount, VideoPath,
+    MonitoringSession, SessionStatus, Telemetry, AUVStatus, Detection, FishCount, VideoPath, User, Role,
 )
 
 
@@ -155,6 +158,32 @@ def test_phone_validation(client, admin_h):
 def test_last_admin_cannot_demote_self(client, admin_h, admin):
     body = {"fullName": "admin", "email": "admin@tes.com", "phoneNumber": "08123456789", "role": "USER"}
     assert client.put(f"/api/users/{admin.id}", headers=admin_h, json=body).status_code == 400
+
+
+def test_admin_role_lock_is_released(client, db, admin_h):
+    email = "admin-kedua@tes.com"
+    other = User(username="admin-kedua", email=email, password="x", phone_number="08123456789", role=Role.ADMIN)
+    db.add(other)
+    db.commit()
+
+    # Named lock melekat ke koneksi: siapkan beberapa koneksi di pool, supaya
+    # pelepasan lewat koneksi yang berbeda dari pengambilnya ikut terlihat.
+    connections = [engine.connect() for _ in range(3)]
+    for c in connections:
+        c.close()
+
+    body = {"fullName": "admin-kedua", "email": email, "phoneNumber": "08123456789", "role": "USER"}
+    assert client.put(f"/api/users/{other.id}", headers=admin_h, json=body).status_code == 200
+
+    with engine.connect() as c:
+        assert c.execute(text("SELECT IS_FREE_LOCK('carter_admin_role')")).scalar() == 1
+
+
+def test_auth_releases_db_connection(db, admin_h):
+    # Koneksi yang tertahan setelah auth membuat 71+ request serentak saling menunggu
+    user = get_user_from_token(admin_h["Authorization"].split()[1], db)
+    assert user["role"] == "ADMIN"
+    assert not db.in_transaction()
 
 
 @pytest.mark.parametrize("path,a,b", [

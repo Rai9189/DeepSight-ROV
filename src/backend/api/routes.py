@@ -215,6 +215,9 @@ def setup_routes(app: FastAPI):
                 except json.JSONDecodeError as e:
                     logger.warning(f"Invalid JSON dari {client_id}: {e}")
                     continue
+                if not isinstance(msg, dict):
+                    logger.warning(f"Pesan WS bukan objek dari {client_id}: {type(msg).__name__}")
+                    continue
                 if msg.get("type") == "offer":
                     try:
                         await handle_offer(websocket, client_id, msg)

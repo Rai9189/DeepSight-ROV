@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, text
 from pydantic import EmailStr, TypeAdapter, ValidationError
 
-from database.connection import get_db
+from database.connection import engine, get_db
 from database.models import User, Role, MonitoringSession
 from auth.password import hash_password, generate_temporary_password
 from core.dependencies import require_admin
@@ -67,19 +67,21 @@ def _read_user_body(body: dict, default_role: str) -> tuple[str, str, str, str]:
 
 
 @contextmanager
-def _admin_role_lock(db: Session):
+def _admin_role_lock():
     """
     Serialkan perubahan role ADMIN dengan named lock MySQL, supaya dua admin
     yang saling menurunkan role pada saat bersamaan diproses bergiliran
-    (row lock FOR UPDATE di sini memicu deadlock → 500). Dilepas setelah
-    commit/rollback di blok pemanggil.
+    (row lock FOR UPDATE di sini memicu deadlock → 500). Memakai koneksi
+    sendiri karena named lock melekat ke koneksi, sedangkan commit di `db`
+    mengembalikan koneksinya ke pool.
     """
-    if db.execute(text("SELECT GET_LOCK('carter_admin_role', 10)")).scalar() != 1:
-        raise HTTPException(status_code=409, detail="Another role change is in progress, please try again")
-    try:
-        yield
-    finally:
-        db.execute(text("SELECT RELEASE_LOCK('carter_admin_role')"))
+    with engine.connect() as conn:
+        if conn.execute(text("SELECT GET_LOCK('carter_admin_role', 10)")).scalar() != 1:
+            raise HTTPException(status_code=409, detail="Another role change is in progress, please try again")
+        try:
+            yield
+        finally:
+            conn.execute(text("SELECT RELEASE_LOCK('carter_admin_role')"))
 
 
 def _ensure_other_admin(db: Session, user_id: str) -> None:
@@ -299,7 +301,7 @@ def update_user(
     if role != user.role.value and user_id == current_user["id"]:
         raise HTTPException(status_code=400, detail="You can't change your own role")
 
-    with (_admin_role_lock(db) if demote_admin else nullcontext()):
+    with (_admin_role_lock() if demote_admin else nullcontext()):
         if demote_admin:
             _ensure_other_admin(db, user_id)
         _apply_user_update(db, user, username, email, phone_number, role)

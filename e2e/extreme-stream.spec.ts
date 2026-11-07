@@ -285,6 +285,25 @@ test('save dialog: script and emoji names stay plain text', async ({ page }) => 
   expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
 });
 
+test('JSON that is not an object does not stop the server listening', async ({ page }) => {
+  await openStream(page);
+  const replies = await page.evaluate(async () => {
+    // A bad offer always gets an error reply, so a reply proves the server still reads this socket
+    const repliesAfter = (payload: string) => new Promise<boolean>(resolve => {
+      const ws = new WebSocket(`ws://localhost:8000/ws/garbage${Math.random().toString(36).slice(2, 10)}`);
+      const finish = (replied: boolean) => { resolve(replied); ws.close(); };
+      ws.onmessage = e => finish(JSON.parse(e.data).type === 'error');
+      ws.onopen = () => {
+        ws.send(payload);
+        ws.send(JSON.stringify({ type: 'offer' }));
+        setTimeout(() => finish(false), 5000);
+      };
+    });
+    return Promise.all([repliesAfter('[1,2,3]'), repliesAfter('null'), repliesAfter('42'), repliesAfter('{}')]);
+  });
+  expect(replies).toEqual([true, true, true, true]);
+});
+
 test('the backend survives garbage on the WebSocket', async ({ page, request }) => {
   await openStream(page);
   const closed = await page.evaluate(async () => {

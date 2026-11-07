@@ -117,7 +117,7 @@ def get_user_from_token(token: str, db: Session) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return {
+    current = {
         "id": user.id,
         "email": user.email,
         "username": user.username,
@@ -125,6 +125,10 @@ def get_user_from_token(token: str, db: Session) -> dict:
         "phone_number": user.phone_number,
         "must_change_password": user.must_change_password,
     }
+    # Kembalikan koneksi ke pool: bila tertahan sampai handler dapat thread,
+    # 71+ request serentak saling menunggu sampai QueuePool timeout (500)
+    db.rollback()
+    return current
 
 
 # ==========================
