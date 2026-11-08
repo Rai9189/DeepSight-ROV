@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Download, Pencil, Play, Search, Trash2 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
@@ -61,6 +62,9 @@ const iconBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-lg bord
 export default function RecordingsTable({ recordings: initialRecordings, isAdmin, playId }: RecordingsTableProps) {
   const [recordings, setRecordings] = useState(initialRecordings)
   useEffect(() => { setRecordings(initialRecordings) }, [initialRecordings])
+  // The Back button shows Next's cached copy of this page, missing a recording saved since; fetch the list again
+  const router = useRouter()
+  useEffect(() => { router.refresh() }, [router])
 
   const [deleting, setDeleting] = useState<Recording | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)

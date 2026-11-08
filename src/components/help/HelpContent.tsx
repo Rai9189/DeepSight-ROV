@@ -49,7 +49,7 @@ const TEXT = {
           },
           {
             q: 'Is the mission video recorded?',
-            a: 'Yes. Recording starts on its own a few seconds after the stream starts and ends when you press Stop. The video appears in Recordings, and the mission’s report links to it with “Watch recording”.',
+            a: 'Yes. Recording starts on its own a few seconds after the stream starts and ends when you press Stop. The video appears in Recordings, and the mission’s report links to it with “Watch recording”. If the newest recording isn’t listed yet, refresh the Recordings page.',
           },
           {
             q: 'Why are some fish not detected?',
@@ -163,7 +163,7 @@ const TEXT = {
           },
           {
             q: 'Apakah video misi direkam?',
-            a: 'Ya. Rekaman mulai sendiri beberapa detik setelah stream dimulai dan berhenti saat Stop ditekan. Videonya ada di Recordings, dan laporan misi menautkannya lewat “Watch recording”.',
+            a: 'Ya. Rekaman mulai sendiri beberapa detik setelah stream dimulai dan berhenti saat Stop ditekan. Videonya ada di Recordings, dan laporan misi menautkannya lewat “Watch recording”. Bila rekaman terbaru belum muncul, refresh halaman Recordings.',
           },
           {
             q: 'Kenapa sebagian ikan tidak terdeteksi?',
