@@ -42,7 +42,7 @@ def timed_inference(img, conf, iou, max_det):
     return dets, (time.perf_counter() - t) * 1000
 
 
-def write_recording(filepath: str, frames: "queue.Queue") -> int:
+def write_recording(filepath: str, frames: "queue.Queue") -> float:
     """
     Tulis frame (monotonic_time, bgr_ndarray) dari antrean ke MP4 sampai
     menerima None. Hanya fungsi ini yang membuka, menulis, dan menutup file,
@@ -86,8 +86,9 @@ def write_recording(filepath: str, frames: "queue.Queue") -> int:
         logger.exception(f"Error writing recording {filepath}")
     finally:
         container.close()
-    logger.info(f"Video writer stopped: {filepath} ({written} frames, {last_pts / 1000:.1f}s)")
-    return written
+    seconds = max(last_pts, 0) / 1000
+    logger.info(f"Video writer stopped: {filepath} ({written} frames, {seconds:.1f}s)")
+    return seconds  # panjang video di file, bukan jam dinding mulai–selesai
 
 
 class RtspDetectionTrack(VideoStreamTrack):
@@ -243,9 +244,13 @@ class RtspDetectionTrack(VideoStreamTrack):
     def start_recording(self, filepath: str):
         self.frame_queue = queue.Queue(maxsize=RECORD_QUEUE_SIZE)
         self.recorded_frames = 0
-        self.writer_thread = threading.Thread(
-            target=write_recording, args=(filepath, self.frame_queue), daemon=True
-        )
+        self.recorded_seconds: Optional[float] = None  # diisi thread penulis saat file ditutup
+        q = self.frame_queue
+
+        def _write():
+            self.recorded_seconds = write_recording(filepath, q)
+
+        self.writer_thread = threading.Thread(target=_write, daemon=True)
         self.writer_thread.start()
         self.recording = True
         logger.info(f"Started recording to {filepath}")

@@ -44,6 +44,8 @@ def test_duration_matches_wall_clock_and_is_seekable(tmp_path):
     _, n, dur = _probe(path)
     assert n > 20
     assert abs(dur - 4.0) < 0.5, dur  # dulu: 210 frame / 10 fps → durasi salah
+    # Durasi yang disimpan ke Recordings = panjang file (dulu jam dinding, ~4 dtk lebih panjang)
+    assert abs(track.recorded_seconds - dur) < 0.1, (track.recorded_seconds, dur)
 
     # keyframe kedua (frame ke-30) jatuh ~detik 3 → seek ke 3.6 harus mendarat
     # di keyframe itu, bukan kembali ke awal file

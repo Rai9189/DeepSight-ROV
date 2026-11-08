@@ -87,7 +87,10 @@ async def stop_recording(client_id: str) -> Optional[dict]:
         await asyncio.to_thread(recording_info["track"].stop_recording)
 
         file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
-        duration = (end_time - recording_info["start_time"]).total_seconds()
+        # Panjang video sebenarnya; jam dinding hanya cadangan bila penulis belum selesai (timeout)
+        duration = getattr(recording_info["track"], "recorded_seconds", None)
+        if duration is None:
+            duration = (end_time - recording_info["start_time"]).total_seconds()
 
         recording_data = {
             "recording_id": recording_info["recording_id"],
