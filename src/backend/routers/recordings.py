@@ -57,16 +57,16 @@ def save_recording_session(
         raise HTTPException(status_code=400, detail=str(e))
 
     if not session_id:
-        raise HTTPException(status_code=400, detail="sessionId wajib diisi")
+        raise HTTPException(status_code=400, detail="sessionId is required")
 
     session = db.query(MonitoringSession).filter(MonitoringSession.id == session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Session tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Mission not found")
 
     if session.status != SessionStatus.RUNNING:
         raise HTTPException(
             status_code=400,
-            detail=f"Session sudah {session.status.value}, tidak bisa diubah lagi"
+            detail=f"The mission is already {session.status.value} and can't be changed"
         )
 
     now = datetime.now(timezone.utc)
@@ -80,7 +80,7 @@ def save_recording_session(
     db.commit()
 
     logger.info(f"Session {session_id} → Completed via save_recording (mission: {label})")
-    return {"success": True, "message": "Recording berhasil disimpan"}
+    return {"success": True, "message": "Recording saved"}
 
 
 # ==========================
@@ -134,7 +134,7 @@ def get_recording(
 ):
     recording = db.query(VideoPath).filter(VideoPath.id == recording_id).first()
     if not recording:
-        raise HTTPException(status_code=404, detail="Recording tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Recording not found")
 
     return {"success": True, "data": _format_recording(recording)}
 
@@ -150,14 +150,14 @@ def delete_recording(
 ):
     recording = db.query(VideoPath).filter(VideoPath.id == recording_id).first()
     if not recording:
-        raise HTTPException(status_code=404, detail="Recording tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Recording not found")
 
     file_name = recording.file_name
     db.delete(recording)
     db.commit()
     delete_recording_files([file_name])
 
-    return {"success": True, "message": "Recording berhasil dihapus"}
+    return {"success": True, "message": "Recording deleted"}
 
 
 def delete_recording_files(file_names: list[str]) -> None:
@@ -193,10 +193,10 @@ def _resolve_recording_file(filename: str, db: Session) -> tuple[str, str]:
     folder temp lama (rekaman sebelum RECORDINGS_DIR dipindah).
     """
     if ".." in filename or "/" in filename or "\\" in filename:
-        raise HTTPException(status_code=400, detail="Nama file tidak valid")
+        raise HTTPException(status_code=400, detail="Invalid file name")
 
     if not db.query(VideoPath.id).filter(VideoPath.file_name == filename).first():
-        raise HTTPException(status_code=404, detail="Video tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Video not found")
 
     filepath = next(
         (p for p in (os.path.join(d, filename) for d in (RECORDINGS_DIR, LEGACY_RECORDINGS_DIR))
@@ -204,7 +204,7 @@ def _resolve_recording_file(filename: str, db: Session) -> tuple[str, str]:
         None,
     )
     if not filepath:
-        raise HTTPException(status_code=404, detail="Video tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Video not found")
 
     media_type = "video/webm" if filename.endswith(".webm") else "video/mp4"
     return filepath, media_type

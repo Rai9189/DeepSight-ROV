@@ -14,9 +14,10 @@ const TOAST_ID = 'swr-fetch-error';
 const failingKeys = new Set<string>();
 
 function showFailingToast() {
-  toast.error('Gagal memuat data dari server', {
+  const n = failingKeys.size;
+  toast.error("Couldn't load data from the server", {
     id: TOAST_ID,
-    description: `${failingKeys.size} permintaan gagal. Data di halaman ini mungkin tidak terbaru.`,
+    description: `${n} ${n === 1 ? 'request' : 'requests'} failed. The data on this page may be out of date.`,
     duration: Infinity,
   });
 }

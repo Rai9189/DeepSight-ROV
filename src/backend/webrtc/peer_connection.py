@@ -48,7 +48,7 @@ async def handle_offer(websocket, client_id: str, message: dict):
     # Get preferences from offer
     offer_sdp = message.get("sdp")
     if not offer_sdp:
-        raise ValueError("Pesan offer tidak memiliki field 'sdp'")
+        raise ValueError("The offer message has no 'sdp' field")
     pref_codec = (message.get("codec") or PREFER_CODEC).lower()
     max_kbps = int(message.get("maxBitrateKbps") or MAX_BITRATE_KBPS_DEFAULT)
     if max_kbps <= 0:  # nilai negatif membuat video tidak pernah tampil
@@ -77,15 +77,15 @@ async def handle_offer(websocket, client_id: str, message: dict):
         )
     except asyncio.TimeoutError:
         peer_connections.pop(client_id, None)
-        raise RuntimeError("RTSP timeout — mediamtx tidak merespons dalam 6 detik. Pastikan ada sumber video.")
+        raise RuntimeError("RTSP timeout: MediaMTX did not respond within 6 seconds. Check that a video source is running.")
     except Exception as exc:
         peer_connections.pop(client_id, None)
-        raise RuntimeError(f"RTSP gagal: {exc}")
+        raise RuntimeError(f"RTSP failed: {exc}")
 
     if not player.video:
         peer_connections.pop(client_id, None)
         _stop_player(player)
-        raise RuntimeError("RTSP tidak memiliki video track")
+        raise RuntimeError("The RTSP stream has no video track")
 
     media_players[client_id] = player
 

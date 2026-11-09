@@ -81,7 +81,7 @@ def sync_sessions(
     """
     records: List[dict] = body.get("records", [])
     if not records:
-        raise HTTPException(status_code=400, detail="records wajib diisi")
+        raise HTTPException(status_code=400, detail="records is required")
 
     fallback_admin = None
     saved = 0
@@ -136,7 +136,7 @@ def sync_sessions(
 
     return {
         "success": True,
-        "message": f"{saved} sesi disimpan, {len(skipped_ids)} dilewati (invalid)",
+        "message": f"{saved} missions saved, {len(skipped_ids)} skipped (invalid)",
         "saved": saved,
         "skipped": len(skipped_ids),
         "skipped_ids": skipped_ids,
@@ -175,7 +175,7 @@ def sync_telemetry(
     if not session_id or not records:
         raise HTTPException(
             status_code=400,
-            detail="session_id dan records wajib diisi"
+            detail="session_id and records are required"
         )
 
     # Verifikasi sesi ada di Base Station
@@ -185,8 +185,8 @@ def sync_telemetry(
     if not session:
         raise HTTPException(
             status_code=404,
-            detail=f"Sesi {session_id} tidak ditemukan di Base Station. "
-                   "Pastikan sesi sudah dibuat terlebih dahulu."
+            detail=f"Mission {session_id} was not found on the Base Station. "
+                   "Sync the mission first."
         )
 
     saved = 0
@@ -241,7 +241,7 @@ def sync_telemetry(
 
     return {
         "success": True,
-        "message": f"{saved} telemetry records disimpan, {skipped} dilewati (duplikat/invalid)",
+        "message": f"{saved} telemetry records saved, {skipped} skipped (duplicate/invalid)",
         "saved": saved,
         "skipped": skipped,
     }
@@ -279,7 +279,7 @@ def sync_detections(
     if not session_id or not records:
         raise HTTPException(
             status_code=400,
-            detail="session_id dan records wajib diisi"
+            detail="session_id and records are required"
         )
 
     session = db.query(MonitoringSession).filter(
@@ -288,7 +288,7 @@ def sync_detections(
     if not session:
         raise HTTPException(
             status_code=404,
-            detail=f"Sesi {session_id} tidak ditemukan di Base Station."
+            detail=f"Mission {session_id} was not found on the Base Station."
         )
 
     saved = 0
@@ -360,7 +360,7 @@ def sync_detections(
 
     return {
         "success": True,
-        "message": f"{saved} detection records disimpan, {skipped} dilewati (duplikat/invalid)",
+        "message": f"{saved} detection records saved, {skipped} skipped (duplicate/invalid)",
         "saved": saved,
         "skipped": skipped,
     }
@@ -402,7 +402,7 @@ def sync_auv_status(
     if not session_id or not records:
         raise HTTPException(
             status_code=400,
-            detail="session_id dan records wajib diisi"
+            detail="session_id and records are required"
         )
 
     session = db.query(MonitoringSession).filter(
@@ -411,7 +411,7 @@ def sync_auv_status(
     if not session:
         raise HTTPException(
             status_code=404,
-            detail=f"Sesi {session_id} tidak ditemukan di Base Station."
+            detail=f"Mission {session_id} was not found on the Base Station."
         )
 
     saved = 0
@@ -469,7 +469,7 @@ def sync_auv_status(
 
     return {
         "success": True,
-        "message": f"{saved} auv_status records disimpan, {skipped} dilewati (duplikat/invalid)",
+        "message": f"{saved} auv_status records saved, {skipped} skipped (duplicate/invalid)",
         "saved": saved,
         "skipped": skipped,
     }

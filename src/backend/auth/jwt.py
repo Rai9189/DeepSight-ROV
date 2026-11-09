@@ -92,7 +92,7 @@ def verify_token(token: str) -> dict:
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Token tidak valid atau sudah expired",
+        detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
 

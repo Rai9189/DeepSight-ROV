@@ -172,7 +172,7 @@ def verify_sync_token(
     if not BASE_STATION_SYNC_TOKEN:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="BASE_STATION_SYNC_TOKEN belum dikonfigurasi di server ini.",
+            detail="BASE_STATION_SYNC_TOKEN is not configured on this server.",
         )
 
     token = get_token_from_request(credentials, request)
@@ -180,7 +180,7 @@ def verify_sync_token(
     if not token or not secrets.compare_digest(token, BASE_STATION_SYNC_TOKEN):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Sync token tidak valid.",
+            detail="Invalid sync token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

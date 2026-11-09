@@ -59,7 +59,7 @@ def save_fish_count(
     if not session_id or not species_name:
         raise HTTPException(
             status_code=400,
-            detail="session_id dan species_name wajib diisi"
+            detail="session_id and species_name are required"
         )
 
     try:
@@ -72,7 +72,7 @@ def save_fish_count(
         MonitoringSession.id == session_id
     ).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Sesi tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Mission not found")
 
     now = datetime.now(timezone.utc)
 
@@ -130,7 +130,7 @@ def save_fish_count_batch(
     if not session_id or not counts:
         raise HTTPException(
             status_code=400,
-            detail="session_id dan counts wajib diisi"
+            detail="session_id and counts are required"
         )
 
     # Verifikasi sesi ada
@@ -138,7 +138,7 @@ def save_fish_count_batch(
         MonitoringSession.id == session_id
     ).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Sesi tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Mission not found")
 
     now = datetime.now(timezone.utc)
     results = []

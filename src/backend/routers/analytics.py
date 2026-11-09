@@ -295,7 +295,7 @@ def get_sessions_by_date(
     try:
         dt = parse_local(date)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Format tanggal tidak valid. Gunakan YYYY-MM-DD (tanggal lokal)")
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD (local date)")
 
     sessions = (
         db.query(MonitoringSession)
@@ -332,7 +332,7 @@ def get_session_by_id(
     ).first()
 
     if not session:
-        raise HTTPException(status_code=404, detail="Sesi tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Mission not found")
 
     return {"success": True, "data": _format_session(session)}
 
@@ -358,7 +358,7 @@ def get_all_sessions(
         try:
             query = query.filter(MonitoringSession.status == SessionStatus(status))
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Status tidak valid. Gunakan: Running, Completed, atau Aborted")
+            raise HTTPException(status_code=400, detail="Invalid status. Use Running, Completed or Aborted")
 
     if sort == "asc":
         query = query.order_by(MonitoringSession.start_time.asc())

@@ -58,15 +58,15 @@ def safe_float(value: Any, field_name: str, default: Optional[float] = None) -> 
     """
     if value is None:
         if default is None:
-            raise ValueError(f"{field_name} wajib diisi")
+            raise ValueError(f"{field_name} is required")
         return default
     try:
         result = float(value)
     except (TypeError, ValueError):
-        raise ValueError(f"{field_name} harus berupa angka, dapat: {value!r}")
+        raise ValueError(f"{field_name} must be a number, got: {value!r}")
     # NaN/Infinity lolos float() tapi ditolak MySQL saat insert
     if not math.isfinite(result):
-        raise ValueError(f"{field_name} harus berupa angka, dapat: {value!r}")
+        raise ValueError(f"{field_name} must be a number, got: {value!r}")
     return result
 
 
@@ -74,9 +74,9 @@ def safe_int(value: Any, field_name: str, default: Optional[int] = None) -> int:
     """Sama seperti safe_float, tapi untuk int."""
     if value is None:
         if default is None:
-            raise ValueError(f"{field_name} wajib diisi")
+            raise ValueError(f"{field_name} is required")
         return default
     try:
         return int(value)
     except (TypeError, ValueError):
-        raise ValueError(f"{field_name} harus berupa angka bulat, dapat: {value!r}")
+        raise ValueError(f"{field_name} must be a whole number, got: {value!r}")

@@ -113,11 +113,11 @@ def save_telemetry(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not session_id:
-        raise HTTPException(status_code=400, detail="session_id wajib diisi")
+        raise HTTPException(status_code=400, detail="session_id is required")
 
     session = db.query(MonitoringSession).filter(MonitoringSession.id == session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Session tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Mission not found")
 
     _get = lambda *keys: next((body[k] for k in keys if body.get(k) is not None), None)
     ph_level         = _get("ph_level", "phLevel")
@@ -128,7 +128,7 @@ def save_telemetry(
     if any(v is None for v in [ph_level, tds_value, dissolved_oxygen, water_temp]):
         raise HTTPException(
             status_code=400,
-            detail="ph_level, tds_value, dissolved_oxygen, water_temp wajib diisi"
+            detail="ph_level, tds_value, dissolved_oxygen and water_temp are required"
         )
 
     now = datetime.now(timezone.utc)

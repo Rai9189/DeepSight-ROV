@@ -138,7 +138,7 @@ async function throwApiError(res: Response): Promise<never> {
   const err = await res.json().catch(() => ({ error: res.statusText }))
   // FastAPI validation errors (422) send `detail` as a list of objects, not text
   const detail = Array.isArray(err.detail) ? err.detail[0]?.msg : err.detail
-  throw new ApiError(err.error || detail || `Request gagal: ${res.status}`, res.status)
+  throw new ApiError(err.error || detail || `Request failed: ${res.status}`, res.status)
 }
 
 // ==============================
@@ -211,7 +211,7 @@ export const authHelper = {
     }>('/api/auth/login', { email, password })
 
     if (!res.access_token || !res.user) {
-      throw new Error('Response login tidak valid dari server')
+      throw new Error('The server sent an invalid sign-in response')
     }
 
     userStorage.set(res.user)

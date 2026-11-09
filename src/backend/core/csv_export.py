@@ -56,13 +56,13 @@ def parse_date_range(from_str: Optional[str], to_str: Optional[str]) -> tuple:
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail="Format tanggal tidak valid. Gunakan ISO 8601 (YYYY-MM-DD)",
+            detail="Invalid date format. Use ISO 8601 (YYYY-MM-DD)",
         )
 
     if from_date and to_date and from_date > to_date:
         raise HTTPException(
             status_code=400,
-            detail="Tanggal awal tidak boleh setelah tanggal akhir",
+            detail="The start date can't be after the end date",
         )
 
     return from_date, to_date

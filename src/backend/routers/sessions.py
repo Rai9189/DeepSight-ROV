@@ -66,7 +66,7 @@ def create_session(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not location_name:
-        raise HTTPException(status_code=400, detail="locationName wajib diisi")
+        raise HTTPException(status_code=400, detail="locationName is required")
     _check_name_length(location_name)
 
     with _start_mission_lock():
@@ -81,8 +81,8 @@ def create_session(
             db.rollback()
             raise HTTPException(
                 status_code=409,
-                detail=f"Sudah ada sesi aktif: {active.id} ({active.location_name}). "
-                       f"Selesaikan sesi tersebut sebelum membuat sesi baru."
+                detail=f"A mission is already running: {active.id} ({active.location_name}). "
+                       f"Finish it before starting a new one."
             )
 
         now = datetime.now(timezone.utc)
@@ -131,7 +131,7 @@ def get_active_session(
     )
 
     if not session:
-        raise HTTPException(status_code=404, detail="Tidak ada sesi aktif")
+        raise HTTPException(status_code=404, detail="No mission is running")
 
     return {"success": True, "data": _format_session(session)}
 
@@ -166,7 +166,7 @@ def get_sessions(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail="status harus: Running | Completed | Aborted"
+                detail="status must be Running, Completed or Aborted"
             )
 
     if sort == "asc":
@@ -208,7 +208,7 @@ def get_session(
     ).first()
 
     if not session:
-        raise HTTPException(status_code=404, detail="Sesi tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Mission not found")
 
     # Ringkasan data dalam sesi
     detection_count = db.query(func.count(Detection.id)).filter(
@@ -272,7 +272,7 @@ def update_session(
     ).first()
 
     if not session:
-        raise HTTPException(status_code=404, detail="Sesi tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Mission not found")
 
     try:
         new_status = safe_str(body.get("status"), "status")
@@ -296,13 +296,13 @@ def update_session(
     if new_status not in ("Completed", "Aborted"):
         raise HTTPException(
             status_code=400,
-            detail="status harus: Completed | Aborted"
+            detail="status must be Completed or Aborted"
         )
 
     if session.status != SessionStatus.RUNNING:
         raise HTTPException(
             status_code=400,
-            detail=f"Sesi sudah {session.status.value}, tidak bisa diubah lagi"
+            detail=f"The mission is already {session.status.value} and can't be changed"
         )
 
     now = datetime.now(timezone.utc)
@@ -341,13 +341,13 @@ def delete_session(
     ).first()
 
     if not session:
-        raise HTTPException(status_code=404, detail="Sesi tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Mission not found")
 
     if session.status == SessionStatus.RUNNING:
         raise HTTPException(
             status_code=400,
-            detail="Tidak bisa menghapus sesi yang sedang Running. "
-                   "Selesaikan sesi terlebih dahulu."
+            detail="A running mission can't be deleted. "
+                   "Finish it first."
         )
 
     file_names = [v.file_name for v in session.video_paths]
@@ -356,7 +356,7 @@ def delete_session(
     delete_recording_files(file_names)
 
     logger.info(f"Session deleted: {session_id}")
-    return {"success": True, "message": f"Sesi {session_id} berhasil dihapus"}
+    return {"success": True, "message": f"Mission {session_id} deleted"}
 
 
 # ==========================

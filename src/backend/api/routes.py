@@ -45,7 +45,7 @@ def _owned_client(client_id: str, user: dict) -> None:
     client_id orang lain tidak bocor.
     """
     if not CLIENT_ID_RE.match(client_id):
-        raise HTTPException(status_code=400, detail="client_id tidak valid")
+        raise HTTPException(status_code=400, detail="Invalid client_id")
     conn = client_connections.get(client_id)
     if conn is None or (conn["user"]["id"] != user["id"] and user["role"] != "ADMIN"):
         raise HTTPException(status_code=404, detail="Client not found or not streaming")
@@ -116,7 +116,7 @@ def setup_routes(app: FastAPI):
         try:
             recording_id = await start_recording(client_id, detection_track)
         except NoActiveMissionError:
-            return {"success": False, "error": "Tidak ada misi aktif — rekaman tidak dimulai"}
+            return {"success": False, "error": "No mission is running, so recording did not start"}
         if recording_id:
             return {
                 "success": True,
@@ -228,7 +228,7 @@ def setup_routes(app: FastAPI):
                         try:
                             await websocket.send_text(json.dumps({
                                 "type": "error",
-                                "message": f"Stream gagal: {offer_err}"
+                                "message": f"Stream failed: {offer_err}"
                             }))
                         except Exception:
                             pass
