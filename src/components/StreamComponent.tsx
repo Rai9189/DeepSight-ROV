@@ -573,7 +573,7 @@ export default function StreamComponent() {
 
   const chips = isStreaming ? [
     auv?.depth != null && `Depth ${auv.depth.toFixed(1)} m${isDepthNearLimit(auv.depth) ? ' · near sensor limit' : ''}`,
-    perfData?.fps != null && `FPS ${perfData.fps.toFixed(0)}`,
+    !!perfData?.fps && `FPS ${perfData.fps.toFixed(0)}`, // 0 = belum terukur → chip disembunyikan
     inferenceMs != null && `Inference ${inferenceMs.toFixed(0)} ms`,
     modelInfo?.conf_threshold != null && `Conf ≥ ${modelInfo.conf_threshold}`,
   ].filter(Boolean) as string[] : []
@@ -777,7 +777,7 @@ export default function StreamComponent() {
           {/* Fish count + recent detections */}
           <div data-testid="fish-card" className={`${card} p-5 flex flex-col ${showPreview && detectionLogs.length === 0 ? 'lg:self-start' : ''}`}>
             <h2 className="text-base font-semibold text-gray-900">Fish counted</h2>
-            <p className="text-xs text-gray-500">Most seen at once, this mission</p>
+            <p className="text-xs text-gray-500">Most seen in a single frame, this mission</p>
             <p className="mt-2 text-4xl font-semibold tracking-tight text-gray-900">{totalFish}</p>
             {/* Only labels the AI really reports: a placeholder species list switched to "ikan" mid-stream */}
             {speciesCounts.length === 0 ? <p className="mt-4 text-sm text-gray-500">No fish detected yet</p> : (

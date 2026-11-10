@@ -21,7 +21,7 @@ from config import (
     SAVE_INTERVAL_SECONDS,
     MIN_DETECTIONS_TO_SAVE
 )
-from models.yolo_detector import run_inference, get_device_info
+from models.yolo_detector import run_inference
 from database.crud.detections import save_detection_to_db  # GANTI: dari database.detections
 
 logger = logging.getLogger("carter-backend")
@@ -33,6 +33,24 @@ RECORD_MOVFLAGS = "frag_keyframe+empty_moov+default_base_moof"
 RECORD_GOP = 30  # keyframe tiap 30 frame = batas fragmen; crash kehilangan < 1 fragmen
 RECORD_QUEUE_SIZE = 60
 STATS_LOG_SECONDS = 10  # ringkasan fps/inferensi di log backend untuk diagnosis latensi
+
+# Hanya satu stream yang menyimpan deteksi (keputusan 2026-11-09): tiap tab
+# punya stream sendiri, jadi tanpa ini log deteksi tercatat dobel. Stream
+# pertama yang menyimpan memegang peran ini sampai ditutup.
+_saving_track: Optional["RtspDetectionTrack"] = None
+
+
+def _claim_saving(track: "RtspDetectionTrack") -> bool:
+    global _saving_track
+    if _saving_track is None:
+        _saving_track = track
+    return _saving_track is track
+
+
+def release_saving(track: Optional["RtspDetectionTrack"]) -> None:
+    global _saving_track
+    if track is not None and _saving_track is track:
+        _saving_track = None
 
 
 def timed_inference(img, conf, iou, max_det):
@@ -104,7 +122,7 @@ class RtspDetectionTrack(VideoStreamTrack):
         # tidak saling menjumlah saat ada >1 client terhubung
         self.frame_count = 0
         self.inference_count = 0
-        self.last_fps_time = time.time()
+        self.last_fps_time: Optional[float] = None  # diisi saat frame pertama, bukan saat koneksi dibuat
         self.last_infer_time = time.time()
         self.current_fps = 0.0
         self.current_infer_fps = 0.0
@@ -155,7 +173,8 @@ class RtspDetectionTrack(VideoStreamTrack):
         now = time.time()
         if (SAVE_DETECTIONS_ENABLED and
             len(dets) >= MIN_DETECTIONS_TO_SAVE and
-            now - self.last_save_time >= SAVE_INTERVAL_SECONDS):
+            now - self.last_save_time >= SAVE_INTERVAL_SECONDS and
+            _claim_saving(self)):
             # Save without blocking — langsung ke SQLAlchemy, tidak lewat HTTP
             if self.save_task is None or self.save_task.done():
                 self.save_task = asyncio.create_task(
@@ -202,9 +221,13 @@ class RtspDetectionTrack(VideoStreamTrack):
             cv2.putText(img, label, (x1, max(0, y1 - 8)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-        # Performance text
-        self.frame_count += 1
+        # Statistik untuk chip web (/api/performance) dan log — tidak digambar ke frame
         now = time.time()
+        if self.last_fps_time is None:
+            # Membuka RTSP bisa makan beberapa detik; kalau dihitung dari saat koneksi
+            # dibuat, FPS pertama ≈ 1 frame / beberapa detik → tampil "FPS 0"
+            self.last_fps_time = now
+        self.frame_count += 1
         if now - self.last_fps_time >= 1.0:
             self.current_fps = self.frame_count / (now - self.last_fps_time)
             self.frame_count = 0
@@ -215,14 +238,6 @@ class RtspDetectionTrack(VideoStreamTrack):
                 f"Stream stats: fps={self.current_fps:.1f}, "
                 f"detections/s={self.current_infer_fps:.1f}, yolo={self.infer_ms:.0f}ms"
             )
-
-        device = get_device_info()
-        cv2.putText(img, f"FPS: {self.current_fps:.1f}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
-        cv2.putText(img, f"Inference: {self.current_infer_fps:.1f}", (10, 70),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-        cv2.putText(img, f"Device: {device}", (10, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 255), 2)
 
         self.enqueue_recording_frame(img)
 

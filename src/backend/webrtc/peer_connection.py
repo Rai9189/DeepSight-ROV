@@ -12,7 +12,7 @@ from config import (
     DISABLE_TWCC_REM
 )
 from video.rtsp_player import make_rtsp_player
-from video.detection_track import RtspDetectionTrack
+from video.detection_track import RtspDetectionTrack, release_saving
 from webrtc.bitrate import set_sender_bitrate, periodic_reapply_bitrate, tune_answer_sdp
 
 logger = logging.getLogger("carter-backend")
@@ -141,7 +141,7 @@ async def cleanup_pc(client_id: str):
     if task:
         task.cancel()
 
-    detection_tracks.pop(client_id, None)
+    release_saving(detection_tracks.pop(client_id, None))
 
     # Tutup file rekaman + simpan ke video_paths agar tidak jadi orphan
     # saat client disconnect tanpa sempat memanggil /api/recording/stop
