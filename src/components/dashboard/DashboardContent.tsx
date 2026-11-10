@@ -266,7 +266,9 @@ export default function DashboardContent() {
                     <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} scale="time" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} tickMargin={8} padding={{ left: 16, right: 8 }} minTickGap={24}
                       tickFormatter={(t: number) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} />
                     {/* Reversed so deeper is lower, like a real dive */}
-                    <YAxis reversed tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} unit=" m" width={56} tickMargin={8} />
+                    {/* Whole metres from the surface: fractional ticks ("0.85 m") were clipped at the left edge */}
+                    <YAxis reversed domain={[0, (max: number) => Math.max(1, Math.ceil(max))]} allowDecimals={false}
+                      tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} unit=" m" width={56} tickMargin={8} />
                     <Tooltip labelFormatter={(t) => new Date(Number(t)).toLocaleTimeString('en-GB')} formatter={(v) => [`${Number(v).toFixed(2)} m`, 'Depth']}
                       contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '12px' }} />
                     <Area type="monotone" dataKey="depth" stroke="#2563eb" strokeWidth={2} fill="#dbeafe" isAnimationActive={false}
