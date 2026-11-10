@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="t d">
+  <title id="t">Deepy – maskot DeepSight ROV</title>
+  <desc id="d">ROV mungil berbentuk tabung akrilik dengan flange hitam sebagai wajah, kamera sebagai mata, thruster di punggung, dan gripper sediment sampler merah sebagai tangan.</desc>
+  <defs>
+    <radialGradient id="dome" cx="40%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#f0f9ff"/>
+      <stop offset=".55" stop-color="#9fd3f7"/>
+      <stop offset="1" stop-color="#3b82c4"/>
+    </radialGradient>
+    <radialGradient id="iris" cx="40%" cy="38%" r="65%">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset=".6" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#0b1f4d"/>
+    </radialGradient>
+    <linearGradient id="tube" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#cdeafe" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#60a5fa" stop-opacity=".7"/>
+    </linearGradient>
+    <linearGradient id="cap" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d1d5db"/>
+      <stop offset="1" stop-color="#6b7280"/>
+    </linearGradient>
+    <linearGradient id="thruster" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#86efac"/>
+      <stop offset=".5" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#15803d"/>
+    </linearGradient>
+    <radialGradient id="cup" cx="35%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#f87171"/>
+      <stop offset="1" stop-color="#991b1b"/>
+    </radialGradient>
+  </defs>
+
+  <!-- bubbles -->
+  <g fill="#e0f2fe" fill-opacity=".35" stroke="#7dd3fc" stroke-width="3">
+    <circle cx="420" cy="70" r="14"/>
+    <circle cx="452" cy="118" r="8"/>
+    <circle cx="398" cy="128" r="6"/>
+    <circle cx="96" cy="96" r="10"/>
+    <circle cx="128" cy="60" r="6"/>
+  </g>
+
+  <!-- shadow -->
+  <ellipse cx="262" cy="478" rx="170" ry="16" fill="#0f172a" opacity=".15"/>
+
+  <!-- top thruster -->
+  <g stroke="#14532d" stroke-width="5" stroke-linejoin="round">
+    <path d="M300 128 L312 104" fill="none" stroke="#1f2937" stroke-width="10" stroke-linecap="round"/>
+    <rect x="292" y="66" width="112" height="44" rx="22" fill="url(#thruster)"/>
+    <ellipse cx="404" cy="88" rx="10" ry="22" fill="#166534"/>
+  </g>
+  <g fill="#94a3b8" opacity=".7">
+    <ellipse cx="426" cy="88" rx="5" ry="30"/>
+  </g>
+  <g fill="none" stroke="#7dd3fc" stroke-width="4" stroke-linecap="round" opacity=".8">
+    <path d="M444 72 q10 16 0 32"/>
+    <path d="M458 64 q14 24 0 48"/>
+  </g>
+
+  <!-- rear end cap -->
+  <circle cx="330" cy="215" r="118" fill="url(#cap)" stroke="#374151" stroke-width="6"/>
+
+  <!-- acrylic tube body -->
+  <path d="M167 156 L273 112 A118 118 0 0 1 387 318 L293 384 Z" fill="url(#tube)" stroke="#1e3a8a" stroke-width="6" stroke-linejoin="round"/>
+  <!-- electronics tray inside -->
+  <path d="M190 262 L340 198 L352 222 L204 290 Z" fill="#1f2937" opacity=".85"/>
+  <g fill="#93c5fd">
+    <rect x="248" y="232" width="22" height="7" rx="3" transform="rotate(-24 259 235)"/>
+    <rect x="292" y="214" width="22" height="7" rx="3" transform="rotate(-24 303 217)"/>
+  </g>
+  <circle cx="318" cy="210" r="5" fill="#22c55e"/>
+  <!-- tube shine -->
+  <path d="M205 160 L290 125" stroke="#ffffff" stroke-width="10" stroke-linecap="round" opacity=".6"/>
+
+  <!-- bottom thruster -->
+  <g stroke="#14532d" stroke-width="5" stroke-linejoin="round">
+    <path d="M340 340 L352 366" fill="none" stroke="#1f2937" stroke-width="10" stroke-linecap="round"/>
+    <rect x="332" y="360" width="104" height="40" rx="20" fill="url(#thruster)"/>
+    <ellipse cx="436" cy="380" rx="9" ry="20" fill="#166534"/>
+  </g>
+  <ellipse cx="456" cy="380" rx="5" ry="27" fill="#94a3b8" opacity=".7"/>
+
+  <!-- right arm (holding a sample) -->
+  <path d="M300 372 C 330 420, 360 430, 392 428" fill="none" stroke="#14532d" stroke-width="24" stroke-linecap="round"/>
+  <path d="M300 372 C 330 420, 360 430, 392 428" fill="none" stroke="#22a046" stroke-width="15" stroke-linecap="round"/>
+  <rect x="384" y="414" width="24" height="28" rx="5" fill="#d4a017" stroke="#7c5a06" stroke-width="4"/>
+  <g transform="translate(428 428)">
+    <path d="M-16 -2 A22 22 0 0 1 28 -2 Z" fill="url(#cup)" stroke="#5f1212" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M-16 2 A22 22 0 0 0 28 2 Z" fill="url(#cup)" stroke="#5f1212" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="6" cy="0" r="3" fill="#fde68a"/>
+  </g>
+
+  <!-- left arm (waving) -->
+  <path d="M120 318 C 80 300, 64 260, 70 214" fill="none" stroke="#14532d" stroke-width="24" stroke-linecap="round"/>
+  <path d="M120 318 C 80 300, 64 260, 70 214" fill="none" stroke="#22a046" stroke-width="15" stroke-linecap="round"/>
+  <rect x="56" y="186" width="28" height="24" rx="5" fill="#d4a017" stroke="#7c5a06" stroke-width="4"/>
+  <g transform="translate(70 186)">
+    <g transform="rotate(-25)">
+      <path d="M-4 -46 A22 22 0 0 0 -4 -2 Z" fill="url(#cup)" stroke="#5f1212" stroke-width="4" stroke-linejoin="round"/>
+    </g>
+    <g transform="rotate(25)">
+      <path d="M4 -46 A22 22 0 0 1 4 -2 Z" fill="url(#cup)" stroke="#5f1212" stroke-width="4" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <g fill="none" stroke="#7dd3fc" stroke-width="4" stroke-linecap="round" opacity=".9">
+    <path d="M28 150 q-10 12 -4 26"/>
+    <path d="M112 146 q10 12 4 26"/>
+  </g>
+
+  <!-- front flange (face) -->
+  <circle cx="230" cy="270" r="130" fill="#1f2328" stroke="#0b0d10" stroke-width="6"/>
+  <circle cx="230" cy="270" r="106" fill="none" stroke="#3a4048" stroke-width="5"/>
+  <g fill="#0b0d10">
+    <circle cx="230" cy="152" r="5"/>
+    <circle cx="313" cy="187" r="5"/>
+    <circle cx="348" cy="270" r="5"/>
+    <circle cx="313" cy="353" r="5"/>
+    <circle cx="230" cy="388" r="5"/>
+    <circle cx="147" cy="353" r="5"/>
+    <circle cx="112" cy="270" r="5"/>
+    <circle cx="147" cy="187" r="5"/>
+  </g>
+  <path d="M140 210 A110 110 0 0 1 215 162" fill="none" stroke="#4b5563" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- acrylic dome -->
+  <circle cx="230" cy="270" r="98" fill="url(#dome)" stroke="#0f172a" stroke-width="4"/>
+
+  <!-- camera eye -->
+  <circle cx="230" cy="252" r="50" fill="#111827"/>
+  <circle cx="230" cy="252" r="42" fill="#374151"/>
+  <circle cx="230" cy="252" r="33" fill="url(#iris)"/>
+  <circle cx="230" cy="252" r="15" fill="#020617"/>
+  <circle cx="216" cy="238" r="9" fill="#ffffff"/>
+  <circle cx="246" cy="266" r="4" fill="#ffffff" opacity=".85"/>
+  <circle cx="230" cy="208" r="3" fill="#ef4444"/>
+
+  <!-- smile & cheeks -->
+  <path d="M206 320 Q230 342 254 320" fill="none" stroke="#0f172a" stroke-width="6" stroke-linecap="round"/>
+  <ellipse cx="180" cy="314" rx="13" ry="8" fill="#fb7185" opacity=".65"/>
+  <ellipse cx="280" cy="314" rx="13" ry="8" fill="#fb7185" opacity=".65"/>
+
+  <!-- dome shine -->
+  <path d="M166 230 A72 72 0 0 1 206 190" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" opacity=".8"/>
+  <circle cx="160" cy="250" r="5" fill="#ffffff" opacity=".8"/>
+</svg>

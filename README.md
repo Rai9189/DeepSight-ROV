@@ -1,3 +1,11 @@
+<p align="center">
+  <img src="public/mascot/deepy.svg" alt="Deepy, maskot DeepSight ROV" width="220" />
+</p>
+
+<p align="center"><b>Deepy</b>, maskot DeepSight ROV</p>
+
+> Deepy terinspirasi dari desain ROV ini: badan tabung akrilik dengan end cap, flange hitam berbaut sebagai wajah, kamera sebagai mata, thruster hijau di punggung, dan gripper sediment sampler merah sebagai tangan. File: `public/mascot/deepy.svg`.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
