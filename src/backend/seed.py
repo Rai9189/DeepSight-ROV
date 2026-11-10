@@ -43,7 +43,7 @@ ADMIN = dict(username='Administrator', email='admin@carterisland.com', phone_num
 DEMO_USER = dict(username='Carter Island User', email='user@carterisland.com', phone_number='+62-812-3456-7891')
 
 # Harus sama persis dengan nama kelas model YOLO (lihat T8)
-SPECIES = ['Kerapu', 'Bandeng', 'Nila Salin', 'Bawal Bintang']
+SPECIES = ['Kerapu', 'Bandeng', 'Nila', 'Bawal']  # nama kelas model best.pt
 HEADINGS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 
 # Misi demo milik akun USER (sisanya milik ADMIN)

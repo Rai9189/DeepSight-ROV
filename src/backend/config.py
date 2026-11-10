@@ -57,7 +57,7 @@ STALE_SESSION_MINUTES = int(os.getenv("STALE_SESSION_MINUTES", "10"))
 # ==========================
 # Model Settings
 # ==========================
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "16sept.pt")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "best.pt")
 YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.45"))
 YOLO_IOU_THRESHOLD = float(os.getenv("YOLO_IOU_THRESHOLD", "0.5"))
 YOLO_MAX_DETECTIONS = int(os.getenv("YOLO_MAX_DETECTIONS", "30"))

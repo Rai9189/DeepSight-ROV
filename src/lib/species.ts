@@ -1,11 +1,11 @@
-// Target species — keep in sync with SPECIES in src/backend/seed.py
-export const TARGET_SPECIES = ['Kerapu', 'Bandeng', 'Nila Salin', 'Bawal Bintang']
+// Species the AI model (models/best.pt) reports — listed on the Help page
+export const TARGET_SPECIES = ['Bandeng', 'Bawal', 'Kerapu', 'Nila']
 
 const SPECIES_COLORS: Record<string, string> = {
   Kerapu: '#3b82f6',
   Bandeng: '#22c55e',
-  'Nila Salin': '#f97316',
-  'Bawal Bintang': '#a855f7',
+  Nila: '#f97316',
+  Bawal: '#a855f7',
   Lainnya: '#9ca3af',
   Unknown: '#9ca3af',
 }

@@ -83,7 +83,7 @@ const TEXT = {
         items: [
           {
             q: 'Which species are detected?',
-            a: `Data is organised around four target species: ${listOf(TARGET_SPECIES, 'and')}. The current AI model can’t tell species apart yet, so it labels every fish as “ikan” (fish). Species names will appear once the updated model is installed.`,
+            a: `The AI model recognises four species: ${listOf(TARGET_SPECIES, 'and')}. Each box in the detection feed shows the species name and how confident the AI is.`,
           },
           {
             q: 'Why do “Fish counted” and “Detections” differ?',
@@ -197,7 +197,7 @@ const TEXT = {
         items: [
           {
             q: 'Spesies apa saja yang dideteksi?',
-            a: `Data disusun untuk empat spesies target: ${listOf(TARGET_SPECIES, 'dan')}. Model AI saat ini belum bisa membedakan spesies, jadi setiap ikan diberi label “ikan”. Nama spesies akan muncul setelah model baru dipasang.`,
+            a: `Model AI mengenali empat spesies: ${listOf(TARGET_SPECIES, 'dan')}. Setiap kotak pada detection feed menampilkan nama spesies dan tingkat keyakinan AI.`,
           },
           {
             q: 'Kenapa “Fish counted” dan “Detections” berbeda?',
