@@ -4,7 +4,7 @@ import LoginForm from '@/components/auth/LoginForm'
 
 export const metadata = {
   title: 'Sign in',
-  description: 'Sign in to Carter Island AUV Dashboard System',
+  description: 'Sign in to DeepSight ROV',
 }
 
 export default async function LoginPage() {

@@ -76,7 +76,7 @@ _install_force_exit_handler(timeout=8)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("=" * 60)
-    logger.info("Starting Carter Island Backend...")
+    logger.info("Starting DeepSight ROV Backend...")
     logger.info("=" * 60)
     logger.info(f"CORS origins: {', '.join(CORS_ORIGINS)} | cookie Secure: {COOKIE_SECURE}")
 
@@ -159,7 +159,7 @@ async def lifespan(app: FastAPI):
 # FastAPI App
 # ==========================
 app = FastAPI(
-    title="Carter Island Unified Backend",
+    title="DeepSight ROV Backend",
     description="ROV monitoring — fish detection, telemetry, streaming",
     version="5.0.0",
     lifespan=lifespan

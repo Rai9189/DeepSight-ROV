@@ -1,5 +1,5 @@
 """
-FastAPI routes for Carter Island Backend
+FastAPI routes for DeepSight ROV Backend
 """
 import json
 import re
@@ -59,7 +59,7 @@ def setup_routes(app: FastAPI):
         """Root endpoint with basic info"""
         model = get_model()
         return {
-            "message": "Carter Island GPU-Optimized Backend",
+            "message": "DeepSight ROV Backend",
             "device": get_device_info(),
             "cuda_available": torch.cuda.is_available(),
             "model_loaded": model is not None,

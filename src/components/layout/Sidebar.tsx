@@ -106,7 +106,7 @@ const Sidebar = ({ session, defaultCollapsed }: SidebarProps) => {
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-600">
                 <Anchor className="h-5 w-5 text-white" />
               </div>
-              <span className="flex-1 truncate text-base font-semibold tracking-tight text-gray-900">Carter Island AUV</span>
+              <span className="flex-1 truncate text-base font-semibold tracking-tight text-gray-900">DeepSight ROV</span>
               <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(true)} aria-label="Collapse sidebar"
                 title="Collapse sidebar (Ctrl+B)" aria-keyshortcuts="Control+B" className="hidden lg:flex h-8 w-8 text-gray-400">
                 <ChevronLeft className="h-4 w-4" />

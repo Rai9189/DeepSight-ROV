@@ -55,8 +55,8 @@ export default function LoginForm() {
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600">
                 <Anchor className="h-7 w-7 text-white" />
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Carter Island AUV</h1>
-              <p className="mt-1 text-sm text-gray-500">AUV monitoring dashboard · MSTP Teluk Awur, Jepara</p>
+              <h1 className="text-2xl font-semibold tracking-tight text-gray-900">DeepSight ROV</h1>
+              <p className="mt-1 text-sm text-gray-500">ROV monitoring dashboard · MSTP Teluk Awur, Jepara</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -92,7 +92,7 @@ export default function LoginForm() {
           </div>
 
           <div className="relative hidden md:block h-full">
-            <Image src="/hero.jpg" alt="Carter Island AUV" fill className="object-cover" priority sizes="50vw" />
+            <Image src="/hero.jpg" alt="DeepSight ROV" fill className="object-cover" priority sizes="50vw" />
           </div>
         </div>
       </div>

@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DeepSight ROV
 
-## Getting Started
+Web dashboard for an underwater ROV: live video with YOLO fish detection, water quality and depth readings, mission recordings, reports and trends across missions.
 
-First, run the development server:
+- **Frontend:** Next.js 15 (port 3000)
+- **Backend:** FastAPI + MySQL (port 8000)
+- **Video relay:** MediaMTX (RTSP, port 8554)
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/Rai9189/DeepSight-ROV.git
+cd DeepSight-ROV
+npm install
+cd src/backend && pip install -r requirements.txt
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The YOLO weights file is not in Git. Copy `best.pt` into `src/backend/models/`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create `.env` in the project root:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | MySQL connection, e.g. `mysql://user:pass@localhost:3306/db` |
+| `JWT_SECRET`, `JWT_SECRET_KEY` | JWT signing key (both must match) |
+| `NEXT_PUBLIC_BACKEND_URL`, `NEXT_PUBLIC_API_URL` | Backend URL for the browser, e.g. `http://localhost:8000` |
+| `RTSP_URL` | Camera stream, e.g. `rtsp://localhost:8554/cam` |
 
-## Learn More
+Optional settings (YOLO thresholds, base station sync) are documented in `src/backend/config.py`.
 
-To learn more about Next.js, take a look at the following resources:
+Seed the database once:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run db:seed
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Running
 
-## Deploy on Vercel
+Start each in its own terminal:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+./mediamtx.exe              # video relay (only needed for live stream)
+./start-backend.ps1         # backend on http://localhost:8000
+npm run dev                 # frontend on http://localhost:3000
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+For a production build use `npm run build` then `npm run start`.
+
+## Tests
+
+```bash
+cd src/backend && python -m pytest   # backend
+npm run test:e2e                     # end-to-end (Playwright, builds first)
+```

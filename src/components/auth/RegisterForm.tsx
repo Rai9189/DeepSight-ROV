@@ -43,8 +43,8 @@ export default function RegisterForm() {
     return (
       <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-md">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-blue-600">Carter Island</h1>
-          <p className="text-gray-600 mt-2">AUV Dashboard System</p>
+          <h1 className="text-3xl font-bold text-blue-600">DeepSight ROV</h1>
+          <p className="text-gray-600 mt-2">ROV monitoring dashboard</p>
           <div className="mt-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
             Registration successful! Redirecting to login page...
           </div>
@@ -56,8 +56,8 @@ export default function RegisterForm() {
   return (
     <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-md">
       <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold text-blue-600">Carter Island</h1>
-        <p className="text-gray-600 mt-2">AUV Dashboard System</p>
+        <h1 className="text-3xl font-bold text-blue-600">DeepSight ROV</h1>
+        <p className="text-gray-600 mt-2">ROV monitoring dashboard</p>
         <h2 className="text-xl font-semibold mt-4">Create Account</h2>
       </div>
 

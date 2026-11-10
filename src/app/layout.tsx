@@ -6,9 +6,9 @@ const fontSans = Geist({ subsets: ['latin'], variable: '--font-app-sans' })
 const fontMono = Geist_Mono({ subsets: ['latin'], variable: '--font-app-mono' })
 
 export const metadata = {
-  // Pages set their own title; the tab reads e.g. "Trends · Carter Island AUV"
-  title: { default: 'Carter Island AUV', template: '%s · Carter Island AUV' },
-  description: 'Autonomous Underwater Vehicle Control System',
+  // Pages set their own title; the tab reads e.g. "Trends · DeepSight ROV"
+  title: { default: 'DeepSight ROV', template: '%s · DeepSight ROV' },
+  description: 'ROV water quality and fish detection monitoring',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

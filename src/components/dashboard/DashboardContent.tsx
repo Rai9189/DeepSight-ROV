@@ -250,7 +250,7 @@ export default function DashboardContent() {
         {!hasSensorData && !isLive ? (
           <div className={`lg:col-span-2 ${card} flex flex-col items-center justify-center p-10 text-center`}>
             <p className="text-base font-semibold text-gray-700">No sensor data recorded for this mission</p>
-            <p className="mt-1 max-w-sm text-sm text-gray-500">Water quality and AUV readings were not received while it ran. Fish detections are still shown.</p>
+            <p className="mt-1 max-w-sm text-sm text-gray-500">Water quality and ROV readings were not received while it ran. Fish detections are still shown.</p>
           </div>
         ) : (
           <div className={`lg:col-span-2 ${card} p-5 flex flex-col`}>
