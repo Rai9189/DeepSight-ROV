@@ -49,14 +49,14 @@ scheduler = AsyncIOScheduler(timezone="Asia/Jakarta")
 _is_rov_online: bool = False
 
 
-# Nama key sensor kualitas air di JSON Raspberry Pi belum pasti (2026-09-25),
-# jadi beberapa alias diterima — dicari di level atas JSON atau di objek
-# "water_quality". Sesuaikan setelah format JSON asli diketahui.
+# Key sensor kualitas air di JSON Raspberry Pi — dicari di level atas JSON
+# atau di objek "water_quality". Format dari tim sensor (Arga, 2026-11-11):
+# ph, tds_ppm, do_mg_l, temperature_c (+ ec_us_cm, timestamp: diabaikan).
 WATER_QUALITY_KEYS = {
     "ph_level":         ("ph", "ph_level", "phLevel"),
-    "tds_value":        ("tds", "tds_value", "tdsValue"),
-    "dissolved_oxygen": ("do", "dissolved_oxygen", "dissolvedOxygen"),
-    "water_temp":       ("water_temp", "waterTemp", "temperature", "temp"),
+    "tds_value":        ("tds_ppm", "tds", "tds_value", "tdsValue"),
+    "dissolved_oxygen": ("do_mg_l", "do", "dissolved_oxygen", "dissolvedOxygen"),
+    "water_temp":       ("temperature_c", "water_temp", "waterTemp", "temperature", "temp"),
 }
 
 
