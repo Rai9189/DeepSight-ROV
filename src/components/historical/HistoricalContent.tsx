@@ -86,7 +86,7 @@ function Stat({ label, value, unit, hint }: { label: string; value: string | num
         <span className="text-3xl font-semibold tracking-tight text-gray-900">{value}</span>
         {unit && value !== '—' && <span className="text-sm text-gray-500">{unit}</span>}
       </p>
-      {hint && <p className="mt-1 text-xs text-gray-400">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
     </div>
   )
 }
@@ -125,7 +125,7 @@ function TrendChart({ title, unit, data, dataKey, band, digits = 1 }: {
           </ResponsiveContainer>
         </div>
       ) : (
-        <p className="flex h-40 items-center justify-center text-sm text-gray-400">No sensor data in this range</p>
+        <p className="flex h-40 items-center justify-center text-sm text-gray-500">No sensor data in this range</p>
       )}
     </div>
   )
@@ -217,7 +217,7 @@ export default function HistoricalContent() {
         {preset === 'custom' && (
           <div className="flex flex-wrap items-center gap-2">
             <input type="date" aria-label="From" value={customFrom} max={customTo} onChange={e => setCustomFrom(e.target.value || localDay(new Date()))} className={inputCls} />
-            <span className="text-sm text-gray-400">–</span>
+            <span className="text-sm text-gray-500">–</span>
             <input type="date" aria-label="To" value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value || localDay(new Date()))} className={inputCls} />
             {reversed && <span className="text-sm text-red-600">“From” must be on or before “To”</span>}
           </div>
@@ -286,7 +286,7 @@ export default function HistoricalContent() {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <p className="flex h-40 items-center justify-center text-sm text-gray-400">No fish counted in this range</p>
+              <p className="flex h-40 items-center justify-center text-sm text-gray-500">No fish counted in this range</p>
             )}
           </div>
 

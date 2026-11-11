@@ -36,9 +36,9 @@ test('the header shows whether the ROV is online', async ({ page }) => {
 
 test('recording videos offer no picture in picture', async ({ page }) => {
   await page.goto('/dashboard/recordings');
-  const cards = page.locator('li video');
-  await expect(cards.first()).toBeAttached({ timeout: 30_000 });
-  expect(await cards.evaluateAll(vs => vs.every(v => (v as HTMLVideoElement).disablePictureInPicture))).toBe(true);
+  // Cards show a still JPEG, so they can't be popped out and don't download the video
+  await expect(page.locator('li img').first()).toBeAttached({ timeout: 30_000 });
+  await expect(page.locator('li video')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Play Misi Contoh' }).click();
   const player = page.getByRole('dialog').locator('video');

@@ -136,7 +136,7 @@ export default function RecordingsTable({ recordings: initialRecordings, isAdmin
       {/* ── Toolbar ── */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-48 flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
           <input
             type="search"
             value={search}
@@ -181,17 +181,17 @@ export default function RecordingsTable({ recordings: initialRecordings, isAdmin
               <li key={rec.id} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-md">
                 <button
                   onClick={() => openPlayer(rec)}
-                  aria-label={`Play ${name}`}
+                  aria-label={`Play ${name}, ${formatDuration(rec.duration)}`}
                   className="relative block aspect-video w-full bg-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400"
                 >
-                  {/* First frame as thumbnail. ponytail: one metadata request per card; switch to server-made thumbnails if the list gets long */}
-                  <video
-                    src={`${backendUrl}/api/recordings/stream/${rec.fileName}#t=0.5`}
-                    preload="metadata"
-                    muted
-                    disablePictureInPicture
-                    playsInline
-                    tabIndex={-1}
+                  {/* Server-made JPEG of the frame at 0.5 s; the video itself loads only in the player */}
+                  {/* eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer can't send the login cookie to the backend */}
+                  <img
+                    src={`${backendUrl}/api/recordings/thumbnail/${rec.fileName}`}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    onError={e => { e.currentTarget.style.visibility = 'hidden' }}
                     className="pointer-events-none h-full w-full object-cover"
                   />
                   <span className="absolute inset-0 flex items-center justify-center bg-black/10 transition-colors group-hover:bg-black/30">

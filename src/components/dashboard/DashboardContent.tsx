@@ -47,7 +47,7 @@ function EmptyState({ title, text }: { title: string; text: string }) {
   return (
     <div className="flex flex-col items-center justify-center h-80 text-center">
       <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-        <Anchor className="w-7 h-7 text-gray-400" />
+        <Anchor className="w-7 h-7 text-gray-500" />
       </div>
       <h3 className="text-base font-semibold text-gray-700 mb-1">{title}</h3>
       <p className="text-sm text-gray-500 max-w-xs">{text}</p>
@@ -297,7 +297,7 @@ export default function DashboardContent() {
                     <span key={label} className="inline-flex items-center gap-1.5 text-sm text-gray-600">
                       <span className={`h-2 w-2 rounded-full ${ok ? 'bg-green-500' : 'border border-gray-300'}`} />
                       {label}
-                      <span className={`text-xs font-medium ${ok ? 'text-green-700' : 'text-gray-400'}`}>{ok ? 'OK' : 'N/A'}</span>
+                      <span className={`text-xs font-medium ${ok ? 'text-green-700' : 'text-gray-500'}`}>{ok ? 'OK' : 'N/A'}</span>
                     </span>
                   ))}
                 </div>

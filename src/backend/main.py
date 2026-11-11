@@ -13,6 +13,7 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from config import SAVE_DETECTIONS_ENABLED, SAVE_INTERVAL_SECONDS, CORS_ORIGINS, COOKIE_SECURE
 from models.yolo_detector import load_custom_model, get_device_info
@@ -173,6 +174,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class ApiGZipMiddleware(GZipMiddleware):
+    """Gzip respons JSON/CSV; file video & gambar dilewati (sudah terkompres, dan gzip merusak seek video)."""
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].startswith(
+                ("/api/recordings/stream/", "/api/recordings/download/", "/api/recordings/thumbnail/")):
+            return await self.app(scope, receive, send)
+        await super().__call__(scope, receive, send)
+
+
+app.add_middleware(ApiGZipMiddleware, minimum_size=1000)
 
 # Routes lama (WebRTC, recording start/stop, model info)
 setup_routes(app)

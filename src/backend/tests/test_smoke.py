@@ -261,6 +261,31 @@ def test_recordings_list_has_mission_name(client, db, admin, admin_h):
     assert [r["missionName"] for r in rows if r["id"] == vid] == ["Tes"]
 
 
+def test_thumbnail_is_jpeg_and_video_is_not_gzipped(client, db, admin, admin_h):
+    import cv2
+    import numpy as np
+    s = make_session(db, admin)
+    name = "recording_pytest_thumb.mp4"
+    path = os.path.join(RECORDINGS_DIR, name)
+    w = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"mp4v"), 10, (640, 360))
+    for _ in range(20):
+        w.write(np.full((360, 640, 3), 120, np.uint8))
+    w.release()
+    db.add(VideoPath(session_id=s.id, file_name=name, file_path=path, format="mp4"))
+    db.commit()
+
+    r = client.get(f"/api/recordings/thumbnail/{name}", headers=admin_h)
+    assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
+    assert r.content[:2] == b"\xff\xd8"
+    assert client.get("/api/recordings/thumbnail/tidak_ada.mp4", headers=admin_h).status_code == 404
+    assert client.get(f"/api/recordings/thumbnail/{name}").status_code in (401, 403)
+
+    gz = {**admin_h, "Accept-Encoding": "gzip"}
+    v = client.get(f"/api/recordings/stream/{name}", headers=gz)
+    assert v.status_code == 200 and "content-encoding" not in v.headers   # seek video tetap jalan
+    assert client.get("/openapi.json", headers=gz).headers.get("content-encoding") == "gzip"
+
+
 def test_delete_session_removes_files(client, db, admin, admin_h):
     s = make_session(db, admin)
     _, p1 = _recording(db, s.id, "recording_pytest_s1.webm")

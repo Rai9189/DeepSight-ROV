@@ -22,7 +22,7 @@ export default function SensorCard({ label, value, unit, status, hint, range }: 
         {has && <span className="text-sm text-gray-500">{unit}</span>}
       </p>
       <p className="mt-2 flex h-4 items-center gap-1.5 text-xs font-medium">
-        {!has && <span className="text-gray-400">No data</span>}
+        {!has && <span className="text-gray-500">No data</span>}
         {s && (
           <>
             <span className={`h-1.5 w-1.5 rounded-full ${TONE[s.tone].dot}`} />
@@ -30,7 +30,7 @@ export default function SensorCard({ label, value, unit, status, hint, range }: 
           </>
         )}
       </p>
-      {hint && <p className="mt-1 text-xs text-gray-400">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
       {has && range && (
         <p className="mt-1 text-xs text-gray-500">
           {(['min', 'max'] as const).map((k, i) => {

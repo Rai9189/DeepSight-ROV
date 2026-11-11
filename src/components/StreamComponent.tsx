@@ -662,7 +662,7 @@ export default function StreamComponent() {
             >
               <Settings2 className="h-4 w-4" />
               Stream settings
-              <span className="text-gray-400">
+              <span className="text-gray-500">
                 · {source === 'server' ? 'ROV camera' : 'This device'} · {codec.toUpperCase()} · {bitrateKbps} kbps
               </span>
               <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${showSettings ? 'rotate-180' : ''}`} />
@@ -834,7 +834,7 @@ export default function StreamComponent() {
         <div className={card}>
           <div className="flex items-center justify-between px-5">
             <button onClick={() => setShowLogs(v => !v)} aria-expanded={showLogs} className="flex flex-1 items-center gap-2 py-3 text-sm font-medium text-gray-700 hover:text-gray-900">
-              System log <span className="font-normal text-gray-400">({logs.length})</span>
+              System log <span className="font-normal text-gray-500">({logs.length})</span>
               <ChevronDown className={`h-4 w-4 transition-transform ${showLogs ? 'rotate-180' : ''}`} />
             </button>
             {showLogs && logs.length > 0 && (
@@ -845,7 +845,7 @@ export default function StreamComponent() {
             <div className="mx-5 mb-5 max-h-72 overflow-y-auto rounded-lg bg-gray-50 p-3 font-mono text-xs leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
               {logs.length > 0 ? logs.map((l, i) => (
                 <div key={i} className={/fail|error|lost|didn't/i.test(l) ? 'text-red-600' : 'text-gray-700'}>{l}</div>
-              )) : <div className="text-gray-400">No log entries</div>}
+              )) : <div className="text-gray-500">No log entries</div>}
             </div>
           )}
         </div>

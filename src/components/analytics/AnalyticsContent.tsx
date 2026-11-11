@@ -90,7 +90,7 @@ function Stat({ label, value, unit, hint }: { label: string; value: string | num
         <span className="text-3xl font-semibold tracking-tight text-gray-900">{value}</span>
         {unit && value !== '—' && <span className="text-sm text-gray-500">{unit}</span>}
       </p>
-      {hint && <p className="mt-1 text-xs text-gray-400">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
     </div>
   )
 }
@@ -341,7 +341,7 @@ export default function AnalyticsContent() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <p className="flex h-48 items-center justify-center text-sm text-gray-400">{detections ? 'No fish detected in this mission' : 'Loading…'}</p>
+            <p className="flex h-48 items-center justify-center text-sm text-gray-500">{detections ? 'No fish detected in this mission' : 'Loading…'}</p>
           )}
         </div>
 
@@ -369,7 +369,7 @@ export default function AnalyticsContent() {
               })}
             </ul>
           ) : (
-            <p className="flex h-40 items-center justify-center text-sm text-gray-400">{detections ? 'No species detected' : 'Loading…'}</p>
+            <p className="flex h-40 items-center justify-center text-sm text-gray-500">{detections ? 'No species detected' : 'Loading…'}</p>
           )}
         </div>
       </div>
@@ -426,7 +426,7 @@ export default function AnalyticsContent() {
                   <td className={`${td} text-gray-700`}>{r.depthAtDetection != null ? `${r.depthAtDetection.toFixed(1)} m` : '—'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-400">No detections recorded</td></tr>
+                <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-500">No detections recorded</td></tr>
               )}
             </tbody>
           </table>
@@ -460,7 +460,7 @@ export default function AnalyticsContent() {
                   <td className={td}><Reading value={r.dissolvedOxygen} digits={1} status={getDoStatus} /></td>
                 </tr>
               )) : (
-                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-400">No sensor readings recorded</td></tr>
+                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-gray-500">No sensor readings recorded</td></tr>
               )}
             </tbody>
           </table>

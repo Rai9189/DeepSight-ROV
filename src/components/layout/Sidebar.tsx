@@ -67,7 +67,7 @@ const Sidebar = ({ session, defaultCollapsed }: SidebarProps) => {
               active ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
             } ${isCollapsed ? 'justify-center' : ''}`}
           >
-            <Icon className={`h-5 w-5 flex-shrink-0 ${active ? 'text-blue-600' : 'text-gray-400'}`} />
+            <Icon className={`h-5 w-5 flex-shrink-0 ${active ? 'text-blue-600' : 'text-gray-500'}`} />
             {!isCollapsed && <span className="truncate">{label}</span>}
           </Link>
         )
@@ -108,10 +108,10 @@ const Sidebar = ({ session, defaultCollapsed }: SidebarProps) => {
               </div>
               <span className="flex-1 truncate text-base font-semibold tracking-tight text-gray-900">DeepSight ROV</span>
               <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(true)} aria-label="Collapse sidebar"
-                title="Collapse sidebar (Ctrl+B)" aria-keyshortcuts="Control+B" className="hidden lg:flex h-8 w-8 text-gray-400">
+                title="Collapse sidebar (Ctrl+B)" aria-keyshortcuts="Control+B" className="hidden lg:flex h-8 w-8 text-gray-500">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => setIsMobileOpen(false)} aria-label="Close menu" className="lg:hidden h-8 w-8 text-gray-400">
+              <Button variant="ghost" size="icon" onClick={() => setIsMobileOpen(false)} aria-label="Close menu" className="lg:hidden h-8 w-8 text-gray-500">
                 <X className="h-4 w-4" />
               </Button>
             </>
@@ -125,7 +125,7 @@ const Sidebar = ({ session, defaultCollapsed }: SidebarProps) => {
             <div className="mt-4">
               {isCollapsed
                 ? <div className="mx-4 mb-2 border-t border-gray-100" />
-                : <p className="mb-1 px-5 text-xs font-medium text-gray-400">Admin</p>}
+                : <p className="mb-1 px-5 text-xs font-medium text-gray-500">Admin</p>}
               <NavLinks items={ADMIN_ITEMS} />
             </div>
           )}

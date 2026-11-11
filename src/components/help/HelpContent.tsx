@@ -329,7 +329,7 @@ export default function HelpContent() {
                   {items.map(({ q, a }) => (
                     <details key={q} className="faq-item group">
                       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg py-2.5 text-sm font-medium text-gray-900 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 [&::-webkit-details-marker]:hidden">
-                        <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
+                        <ChevronRight className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
                         {q}
                       </summary>
                       <p className="pb-3 pl-6 text-sm leading-relaxed text-gray-600">{a}</p>

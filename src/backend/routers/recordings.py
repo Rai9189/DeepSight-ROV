@@ -14,7 +14,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+import cv2
 from sqlalchemy.orm import Session, joinedload
 
 from database.connection import get_db
@@ -218,6 +219,31 @@ def stream_video(
 ):
     filepath, media_type = _resolve_recording_file(filename, db)
     return FileResponse(filepath, media_type=media_type, filename=filename)
+
+
+@router.get("/thumbnail/{filename}")
+def video_thumbnail(
+    filename: str,
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user),
+):
+    """JPEG kecil dari frame ke-0,5 dtk — kartu Recordings tak perlu mengunduh videonya."""
+    filepath, _media = _resolve_recording_file(filename, db)
+    # ponytail: dibuat ulang tiap request (browser cache 1 hari); simpan ke disk bila daftar rekaman sangat panjang
+    cap = cv2.VideoCapture(filepath)
+    try:
+        cap.set(cv2.CAP_PROP_POS_MSEC, 500)
+        ok, frame = cap.read()
+    finally:
+        cap.release()
+    if not ok:
+        raise HTTPException(status_code=404, detail="Thumbnail unavailable")
+    h, w = frame.shape[:2]
+    if w > 480:
+        frame = cv2.resize(frame, (480, round(h * 480 / w)), interpolation=cv2.INTER_AREA)
+    _, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+    return Response(jpg.tobytes(), media_type="image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
 
 
 @router.get("/download/{filename}")

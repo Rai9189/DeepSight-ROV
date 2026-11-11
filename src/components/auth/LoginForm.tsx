@@ -71,7 +71,7 @@ export default function LoginForm() {
                 <div className="relative">
                   <input id="password" name="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={formData.password} onChange={handleChange} disabled={loading}
                     className={`${inputCls} pr-12`} autoComplete="current-password" />
-                  <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 transition-colors" onClick={() => setShowPassword(!showPassword)} disabled={loading} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                  <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-500 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 transition-colors" onClick={() => setShowPassword(!showPassword)} disabled={loading} aria-label={showPassword ? 'Hide password' : 'Show password'}>
                     {showPassword ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
                   </button>
                 </div>

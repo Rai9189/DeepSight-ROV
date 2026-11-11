@@ -32,7 +32,7 @@ function PasswordField({ id, label, hint, value, onChange, autoComplete, autoFoc
           type="button"
           onClick={() => setShow(s => !s)}
           aria-label={show ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-500 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
         >
           {show ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
         </button>
