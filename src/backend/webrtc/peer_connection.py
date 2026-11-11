@@ -70,9 +70,16 @@ async def handle_offer(websocket, client_id: str, message: dict):
     # av.open() di MediaPlayer adalah blocking call — jika dijalankan langsung
     # di async function, seluruh event loop (termasuk Ctrl+C) akan terhenti
     loop = asyncio.get_running_loop()
+
+    def open_player():
+        # Python 3.8 (Jetson JetPack 5): aiortc membuat asyncio.Queue saat MediaPlayer
+        # dibuat, dan Queue 3.8 mengikat event loop thread ini — beri loop utama
+        asyncio.set_event_loop(loop)
+        return make_rtsp_player(transport)
+
     try:
         player = await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: make_rtsp_player(transport)),
+            loop.run_in_executor(None, open_player),
             timeout=6.0
         )
     except asyncio.TimeoutError:
