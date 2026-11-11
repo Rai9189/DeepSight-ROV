@@ -9,6 +9,9 @@
 fastapi==0.116.1
 uvicorn==0.35.0; python_version >= "3.9"
 uvicorn==0.33.0; python_version < "3.9"
+# Tanpa ini uvicorn menolak WebSocket (/ws/...) dan halaman Stream tidak bisa mulai
+websockets==15.0.1; python_version >= "3.9"
+websockets==13.1; python_version < "3.9"
 python-dotenv==1.1.1; python_version >= "3.9"
 python-dotenv==1.0.1; python_version < "3.9"
 python-multipart==0.0.20
@@ -31,3 +34,6 @@ PyJWT==2.9.0; python_version < "3.9"
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 APScheduler==3.10.4
+# tzlocal 4–5 (dipakai APScheduler) menarik backports.zoneinfo di Python 3.8, yang harus
+# di-compile dan gagal di image Jetson (tanpa Python.h). tzlocal 2.1 cukup pytz.
+tzlocal==2.1; python_version < "3.9"
