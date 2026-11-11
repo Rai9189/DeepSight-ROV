@@ -193,7 +193,7 @@ def test_health_check_reuses_http_client(monkeypatch):
 
     class Offline:
         async def get(self, url): raise httpx.ConnectError("offline")
-        async def head(self, url): raise httpx.ConnectError("offline")
+        async def post(self, url, **kw): raise httpx.ConnectError("offline")
 
     def no_new_client(*a, **k): raise AssertionError("health check membuat AsyncClient baru")
     monkeypatch.setattr(sch, "_http", Offline())
@@ -202,6 +202,26 @@ def test_health_check_reuses_http_client(monkeypatch):
     for _ in range(3):
         asyncio.run(sch.health_check_job())
     assert sch._is_rov_online is False
+
+
+@pytest.mark.parametrize("whep_status,online", [(404, False), (400, True), (500, False)])
+def test_rov_online_follows_mediamtx_stream(monkeypatch, whep_status, online):
+    """Tanpa Raspi, ROV online = kamera sedang mem-publish ke MediaMTX (404 di /whep = tak ada video)."""
+    import httpx
+    import core.scheduler as sch
+    seen = []
+
+    async def handler(request):
+        seen.append((request.method, request.url.path))
+        if request.url.path.endswith("/whep"):
+            return httpx.Response(whep_status)
+        raise httpx.ConnectError("raspi offline")
+
+    monkeypatch.setattr(sch, "_http", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    monkeypatch.setattr(sch, "MEDIAMTX_URL", "http://mediamtx:8889/cam/")
+    asyncio.run(sch.health_check_job())
+    assert sch._is_rov_online is online
+    assert ("POST", "/cam/whep") in seen
 
 
 def test_auth_releases_db_connection(db, admin_h):

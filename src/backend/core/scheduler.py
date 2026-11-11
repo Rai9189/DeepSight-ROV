@@ -109,11 +109,18 @@ async def health_check_job():
     except Exception as e:
         logger.warning(f"Health check — Raspi error: {e}")
 
-    # ── Cek 2: MediaMTX fallback ──
+    # ── Cek 2: MediaMTX fallback — apakah kamera sedang mem-publish? ──
+    # HEAD/GET /cam/ tak bisa dipakai: MediaMTX 1.16 membalas HEAD selalu 404 dan GET
+    # selalu 200 (halaman pemutar). POST /cam/whep dengan SDP kosong membalas 404
+    # "no stream is available" bila tak ada video, dan 400 (SDP tak valid) bila ada.
     if not is_online:
         try:
-            response = await _http.head(MEDIAMTX_URL)
-            if response.is_success:
+            response = await _http.post(
+                MEDIAMTX_URL.rstrip("/") + "/whep",
+                content=b"v=0",
+                headers={"Content-Type": "application/sdp"},
+            )
+            if response.status_code != 404 and response.status_code < 500:
                 is_online = True
         except (httpx.ConnectError, httpx.TimeoutException):
             pass
