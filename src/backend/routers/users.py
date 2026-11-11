@@ -12,7 +12,7 @@ must_change_password=True, jadi pengguna wajib menggantinya saat login.
 import logging
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, text
@@ -36,7 +36,7 @@ _email_adapter = TypeAdapter(EmailStr)
 # ==========================
 # Helper
 # ==========================
-def _read_user_body(body: dict, default_role: str) -> tuple[str, str, str, str]:
+def _read_user_body(body: dict, default_role: str) -> Tuple[str, str, str, str]:
     """
     Ambil & validasi field user dari body mentah → 400 kalau salah.
     Return (username, email, phone_number, role). Field "password" diabaikan:

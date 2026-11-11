@@ -7,6 +7,8 @@ import threading
 import torch
 from contextlib import asynccontextmanager
 
+import core.compat  # noqa: F401  asyncio.to_thread untuk Python 3.8 (Jetson JetPack 5)
+
 # Fix Ctrl+C di Windows — event loop default Windows tidak handle SIGINT dengan benar
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

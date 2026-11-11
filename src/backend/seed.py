@@ -22,6 +22,7 @@ import sys
 import os
 import random
 from datetime import datetime, timezone, timedelta
+from typing import List
 
 # Pastikan path backend bisa diimport
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -297,7 +298,7 @@ def demo(db) -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main(args: list[str]) -> None:
+def main(args: List[str]) -> None:
     # Terminal Windows (cp1252) gagal mencetak '→' dan '—' tanpa ini
     sys.stdout.reconfigure(encoding='utf-8')
     if not ({'--fresh', '--demo'} & set(args)):

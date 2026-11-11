@@ -10,6 +10,7 @@ Catatan:
 """
 import math
 import threading
+from typing import Dict, Optional
 import time
 from collections import deque
 
@@ -20,10 +21,10 @@ class FailedAttemptLimiter:
     def __init__(self, max_failures: int, window_seconds: float):
         self.max_failures = max_failures
         self.window_seconds = window_seconds
-        self._failures: dict[str, deque] = {}
+        self._failures: Dict[str, deque] = {}
         self._lock = threading.Lock()
 
-    def _prune(self, key: str, now: float) -> deque | None:
+    def _prune(self, key: str, now: float) -> Optional[deque]:
         q = self._failures.get(key)
         if q is None:
             return None

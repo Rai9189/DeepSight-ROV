@@ -11,11 +11,16 @@ Aturan proyek:
 """
 from datetime import datetime, timezone
 from typing import Optional
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # Python 3.8 (Jetson JetPack 5)
+    from dateutil.tz import gettz as ZoneInfo
 
 from config import APP_TIMEZONE
 
 LOCAL_TZ = ZoneInfo(APP_TIMEZONE)
+if LOCAL_TZ is None:  # gettz (Python 3.8) mengembalikan None, bukan error
+    raise RuntimeError(f"Zona waktu tidak dikenal: {APP_TIMEZONE}")
 
 
 def iso_utc(dt: Optional[datetime]) -> Optional[str]:

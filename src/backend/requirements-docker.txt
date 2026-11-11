@@ -3,21 +3,31 @@
 # ultralytics/ultralytics (varian CPU, CUDA x86, atau Jetson) — jangan dipasang di sini,
 # karena versi PyPI akan menimpa build CUDA/Jetson-nya.
 # Versi mengikuti requirements.txt; ubah keduanya bersamaan.
+#
+# Baris bertanda python_version<"3.9" khusus Jetson JetPack 5 (image jetpack5 = Python 3.8,
+# satu-satunya Python yang punya torch GPU di JetPack 5). Versi baru tidak mendukung 3.8.
 fastapi==0.116.1
-uvicorn==0.35.0
-python-dotenv==1.1.1
+uvicorn==0.35.0; python_version >= "3.9"
+uvicorn==0.33.0; python_version < "3.9"
+python-dotenv==1.1.1; python_version >= "3.9"
+python-dotenv==1.0.1; python_version < "3.9"
 python-multipart==0.0.20
 email-validator==2.3.0
 httpx==0.28.1
 aiofiles==24.1.0
-aiortc==1.14.0
+aiortc==1.14.0; python_version >= "3.9"
+aiortc==1.9.0; python_version < "3.9"
 psutil==7.0.0
 pytz
 tzdata==2025.3
+# Python 3.8 belum punya zoneinfo; core/timeutil.py memakai dateutil sebagai gantinya
+python-dateutil==2.9.0.post0
 sqlalchemy==2.0.41
 pymysql==1.1.1
-alembic==1.20.0
-PyJWT==2.15.0
+alembic==1.20.0; python_version >= "3.9"
+alembic==1.14.1; python_version < "3.9"
+PyJWT==2.15.0; python_version >= "3.9"
+PyJWT==2.9.0; python_version < "3.9"
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 APScheduler==3.10.4

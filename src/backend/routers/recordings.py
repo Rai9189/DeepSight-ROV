@@ -12,7 +12,7 @@ Perubahan dari versi lama:
 import os
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
 import cv2
@@ -161,7 +161,7 @@ def delete_recording(
     return {"success": True, "message": "Recording deleted"}
 
 
-def delete_recording_files(file_names: list[str]) -> None:
+def delete_recording_files(file_names: List[str]) -> None:
     """
     Hapus file video milik baris video_paths yang SUDAH dihapus dari DB.
     Dipanggil setelah commit — kalau DB gagal, video tidak ikut hilang.
@@ -185,7 +185,7 @@ def delete_recording_files(file_names: list[str]) -> None:
 # ==========================
 # GET /api/recordings/stream/{filename} & /download/{filename}
 # ==========================
-def _resolve_recording_file(filename: str, db: Session) -> tuple[str, str]:
+def _resolve_recording_file(filename: str, db: Session) -> Tuple[str, str]:
     """
     Kembalikan (filepath, media_type) untuk file recording yang valid.
     Hanya file yang tercatat di tabel video_paths yang boleh diakses —
