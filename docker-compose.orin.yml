@@ -1,0 +1,4 @@
+# Tambahan untuk Jetson Orin: GPU lewat NVIDIA container runtime bawaan JetPack.
+services:
+  backend:
+    runtime: nvidia

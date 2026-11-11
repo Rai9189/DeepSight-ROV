@@ -46,6 +46,23 @@ npm run dev                 # frontend on http://localhost:3000
 
 For a production build use `npm run build` then `npm run start`.
 
+## Running with Docker (laptop or Jetson Orin)
+
+Runs MySQL, backend, frontend and MediaMTX together; no Python, Node or MySQL install needed.
+
+1. Install Docker. Windows: Docker Desktop, then enable *Settings → Resources → Network → Enable host networking*. Jetson Orin: Docker and the NVIDIA runtime come with JetPack.
+2. Copy the fish model to `src/backend/models/best.pt` (not in Git).
+3. `cp .env.example .env`, fill in the passwords and `JWT_SECRET_KEY`, set `PUBLIC_HOST` to this machine's IP, and uncomment the image line for this machine (CPU, NVIDIA GPU or Jetson).
+4. Start everything:
+
+```bash
+docker compose up -d --build
+docker compose exec backend python3 seed.py   # first run only: creates the admin account
+```
+
+Open `http://<PUBLIC_HOST>:3000`. Logs: `docker compose logs -f backend`. Stop: `docker compose down` (data and recordings are kept in Docker volumes).
+After changing `PUBLIC_HOST`, rebuild the frontend: `docker compose build frontend && docker compose up -d`.
+
 ## Tests
 
 ```bash

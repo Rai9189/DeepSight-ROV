@@ -1,0 +1,11 @@
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+recordings/
+tests/
+*.log
+.env
+main_old.py
+verify_fase*.py

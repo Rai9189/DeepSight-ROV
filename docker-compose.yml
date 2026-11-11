@@ -1,0 +1,68 @@
+# DeepSight ROV — semua layanan dalam satu perintah: `docker compose up -d --build`
+# Isi .env dulu (lihat .env.example). GPU: lihat COMPOSE_FILE di .env.example.
+#
+# backend, frontend & mediamtx memakai jaringan host: WebRTC (video live) butuh
+# port UDP acak yang tidak bisa dipetakan satu per satu. Di Docker Desktop
+# (Windows/Mac) aktifkan dulu Settings → Resources → Network → "Enable host networking".
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-deepsight}
+      MYSQL_USER: ${MYSQL_USER:-deepsight}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?isi MYSQL_PASSWORD di .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?isi MYSQL_ROOT_PASSWORD di .env}
+      TZ: Asia/Jakarta
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    build:
+      context: ./src/backend
+      args:
+        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-ultralytics/ultralytics:latest-cpu}
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    env_file: .env
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-deepsight}:${MYSQL_PASSWORD}@127.0.0.1:${MYSQL_PORT:-3307}/${MYSQL_DATABASE:-deepsight}
+      CORS_ORIGINS: http://${PUBLIC_HOST:-localhost}:3000,http://localhost:3000
+      TZ: Asia/Jakarta
+    volumes:
+      - recordings:/app/recordings
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: http://${PUBLIC_HOST:-localhost}:8000
+        NEXT_PUBLIC_STREAM_PREVIEW_URL: ${STREAM_PREVIEW_URL:-http://localhost:8889/cam/}
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - backend
+
+  # Relay video RTSP/WebRTC. Kamera ROV (atau ffmpeg uji) mem-publish ke rtsp://<host>:8554/cam
+  mediamtx:
+    image: bluenviron/mediamtx:1.16.3
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+
+volumes:
+  mysql-data:
+  recordings:

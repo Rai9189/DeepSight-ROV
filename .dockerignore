@@ -1,0 +1,16 @@
+# Frontend image: hanya kode Next.js
+node_modules/
+.next/
+.git/
+.env
+.env.*
+src/backend/
+docs/
+catatan/
+tasks/
+e2e/
+test-results/
+playwright-report/
+*.mp4
+*.exe
+*.log
