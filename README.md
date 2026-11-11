@@ -57,7 +57,7 @@ Runs MySQL, backend, frontend and MediaMTX together; no Python, Node or MySQL in
 
 ```bash
 docker compose up -d --build
-docker compose exec backend python3 seed.py   # first run only: creates the admin account
+docker compose exec backend python3 seed.py --fresh   # first run only: type DELETE, prints the admin password
 ```
 
 Open `http://<PUBLIC_HOST>:3000`. Logs: `docker compose logs -f backend`. Stop: `docker compose down` (data and recordings are kept in Docker volumes).
