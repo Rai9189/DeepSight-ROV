@@ -374,3 +374,33 @@ def test_stream_uses_chosen_codec(codec):
         return first
 
     assert asyncio.run(negotiate()) == f"video/{codec}"
+
+
+def test_deleting_the_last_admin_is_refused(client, db, admin):
+    """
+    Celah balapan "A hapus B" bersamaan "B turunkan A": A sudah lolos cek admin,
+    lalu diturunkan sebelum hapusnya jalan. Kondisi itu ditiru langsung: semua
+    admin lain sudah USER saat DELETE admin terakhir diproses.
+    """
+    import main
+    from core.dependencies import require_admin
+
+    last = User(username="admin-terakhir", email="admin-terakhir@tes.com", password="x",
+                phone_number="08123456789", role=Role.ADMIN)
+    db.add(last)
+    db.commit()
+    others = [u for u in db.query(User).filter(User.role == Role.ADMIN, User.id != last.id)]
+    for u in others:
+        u.role = Role.USER
+    db.commit()
+    main.app.dependency_overrides[require_admin] = lambda: {"id": admin.id, "email": admin.email}
+    try:
+        assert client.delete(f"/api/users/{last.id}").status_code == 400
+        db.expire_all()
+        assert db.get(User, last.id) is not None
+    finally:
+        main.app.dependency_overrides.pop(require_admin, None)
+        for u in others:
+            u.role = Role.ADMIN
+        db.delete(last)
+        db.commit()

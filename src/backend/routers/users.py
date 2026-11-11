@@ -364,15 +364,21 @@ def delete_user(
     email = user.email
     username = user.username
 
-    # Alihkan misi dulu — kalau tidak, cascade di DB ikut menghapus semua
-    # telemetri, deteksi, dan rekaman misi user ini
-    reassigned = (
-        db.query(MonitoringSession)
-        .filter(MonitoringSession.user_id == user_id)
-        .update({MonitoringSession.user_id: current_user["id"]}, synchronize_session=False)
-    )
-    db.delete(user)
-    db.commit()
+    # Hapus ADMIN memakai kunci yang sama dengan turunkan role: tanpa ini,
+    # "A hapus B" bersamaan "B turunkan A" bisa meninggalkan sistem tanpa admin
+    delete_admin = user.role == Role.ADMIN
+    with (_admin_role_lock() if delete_admin else nullcontext()):
+        if delete_admin:
+            _ensure_other_admin(db, user_id)
+        # Alihkan misi dulu — kalau tidak, cascade di DB ikut menghapus semua
+        # telemetri, deteksi, dan rekaman misi user ini
+        reassigned = (
+            db.query(MonitoringSession)
+            .filter(MonitoringSession.user_id == user_id)
+            .update({MonitoringSession.user_id: current_user["id"]}, synchronize_session=False)
+        )
+        db.delete(user)
+        db.commit()
 
     logger.info(
         f"User deleted: {user_id} ({email}) by admin: {current_user['email']}, "
