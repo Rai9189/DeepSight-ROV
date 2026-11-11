@@ -1,4 +1,4 @@
-# Script untuk menjalankan backend Carter Island
+# Script untuk menjalankan backend DeepSight ROV
 # Jalankan dari root project: .\start-backend.ps1
 #
 # Kenapa pakai python main.py bukan uvicorn --reload?
@@ -7,6 +7,6 @@
 # - Ctrl+C akan berhenti dalam maks 8 detik
 
 Set-Location "$PSScriptRoot\src\backend"
-Write-Host "Starting Carter Island Backend..." -ForegroundColor Cyan
+Write-Host "Starting DeepSight ROV Backend..." -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop (will force-exit in 8s if stuck)" -ForegroundColor Yellow
 python main.py
