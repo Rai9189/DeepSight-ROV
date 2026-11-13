@@ -204,23 +204,46 @@ def test_health_check_reuses_http_client(monkeypatch):
     assert sch._is_rov_online is False
 
 
-@pytest.mark.parametrize("whep_status,online", [(404, False), (400, True), (500, False)])
-def test_rov_online_follows_mediamtx_stream(monkeypatch, whep_status, online):
-    """Tanpa Raspi, ROV online = kamera sedang mem-publish ke MediaMTX (404 di /whep = tak ada video)."""
+def _run_health_check(monkeypatch, api, whep_status=404):
+    """api: (status, json) dari API MediaMTX, atau None = API tak terjangkau."""
     import httpx
     import core.scheduler as sch
     seen = []
 
     async def handler(request):
         seen.append((request.method, request.url.path))
+        if request.url.path == "/v3/paths/get/cam":
+            if api is None:
+                raise httpx.ConnectError("api off")
+            return httpx.Response(api[0], json=api[1])
         if request.url.path.endswith("/whep"):
             return httpx.Response(whep_status)
         raise httpx.ConnectError("raspi offline")
 
     monkeypatch.setattr(sch, "_http", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     monkeypatch.setattr(sch, "MEDIAMTX_URL", "http://mediamtx:8889/cam/")
+    monkeypatch.setattr(sch, "MEDIAMTX_API_URL", "http://127.0.0.1:9997")
     asyncio.run(sch.health_check_job())
-    assert sch._is_rov_online is online
+    return sch._is_rov_online, seen
+
+
+@pytest.mark.parametrize("api,online", [
+    ((200, {"name": "cam", "ready": True}), True),
+    ((200, {"name": "cam", "ready": False}), False),
+    ((404, {"error": "path not found"}), False),
+])
+def test_rov_online_from_mediamtx_api(monkeypatch, api, online):
+    """Tanpa Raspi, ROV online = kamera mem-publish; dicek lewat API, tanpa POST /whep (spam log)."""
+    is_online, seen = _run_health_check(monkeypatch, api)
+    assert is_online is online
+    assert ("POST", "/cam/whep") not in seen
+
+
+@pytest.mark.parametrize("whep_status,online", [(404, False), (400, True), (500, False)])
+def test_rov_online_falls_back_to_whep(monkeypatch, whep_status, online):
+    """API MediaMTX tak terjangkau → cara lama: 404 di /whep = tak ada video."""
+    is_online, seen = _run_health_check(monkeypatch, None, whep_status)
+    assert is_online is online
     assert ("POST", "/cam/whep") in seen
 
 

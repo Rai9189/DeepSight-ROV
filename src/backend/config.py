@@ -9,6 +9,8 @@ load_dotenv()
 RTSP_URL = os.getenv("RTSP_URL", "rtsp://192.168.2.2:8554/cam")
 RASPI_TELEMETRY_URL = os.getenv("RASPI_TELEMETRY_URL", "http://192.168.2.2:14552/telemetry")
 MEDIAMTX_URL = os.getenv("MEDIAMTX_URL", "http://192.168.2.2:8889/cam/")
+# API MediaMTX untuk cek "ROV online" — hanya bisa diakses dari mesin yang sama (mediamtx.yml)
+MEDIAMTX_API_URL = os.getenv("MEDIAMTX_API_URL", "http://127.0.0.1:9997")
 RTSP_TRANSPORT = os.getenv("RTSP_TRANSPORT", "udp")
 TARGET_FPS = int(os.getenv("TARGET_FPS", "30"))
 RESIZE_WIDTH = int(os.getenv("RESIZE_WIDTH", "854"))
@@ -58,7 +60,8 @@ STALE_SESSION_MINUTES = int(os.getenv("STALE_SESSION_MINUTES", "10"))
 # Model Settings
 # ==========================
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "best.pt")
-YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.45"))
+# 0.25 per the ML team; set YOLO_CONF_THRESHOLD=0.45 in .env if false detections pile up
+YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.25"))
 YOLO_IOU_THRESHOLD = float(os.getenv("YOLO_IOU_THRESHOLD", "0.5"))
 YOLO_MAX_DETECTIONS = int(os.getenv("YOLO_MAX_DETECTIONS", "30"))
 

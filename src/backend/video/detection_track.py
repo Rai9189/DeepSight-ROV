@@ -53,6 +53,23 @@ def release_saving(track: Optional["RtspDetectionTrack"]) -> None:
         _saving_track = None
 
 
+def letterbox(img: np.ndarray, size: Tuple[int, int]) -> np.ndarray:
+    """
+    Resize ke size (w, h) tanpa menarik gambar: sumber yang rasionya beda
+    (mis. kamera 4:3 ke 854x480) diberi pita hitam, ukuran keluaran tetap.
+    """
+    w, h = size
+    ih, iw = img.shape[:2]
+    scale = min(w / iw, h / ih)
+    nw, nh = round(iw * scale), round(ih * scale)
+    if nw >= w - 2 and nh >= h - 2:  # rasio (hampir) sama: 1280x720→854x480 selisih 1 px pembulatan
+        return cv2.resize(img, size, interpolation=cv2.INTER_LINEAR)
+    out = np.zeros((h, w, 3), np.uint8)
+    x, y = (w - nw) // 2, (h - nh) // 2
+    out[y:y + nh, x:x + nw] = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
+    return out
+
+
 def timed_inference(img, conf, iou, max_det):
     """run_inference + lama YOLO sebenarnya (ms), diukur di thread inferensi."""
     t = time.perf_counter()
@@ -194,7 +211,7 @@ class RtspDetectionTrack(VideoStreamTrack):
         img = frame.to_ndarray(format="bgr24")
 
         if self.size:
-            img = cv2.resize(img, self.size, interpolation=cv2.INTER_LINEAR)
+            img = letterbox(img, self.size)
 
         # Ambil hasil inferensi yang sudah selesai
         task = self.infer_task

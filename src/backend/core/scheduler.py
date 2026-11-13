@@ -24,6 +24,7 @@ import logging
 import asyncio
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -31,7 +32,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from config import (
     BASE_STATION_URL, BASE_STATION_SYNC_TOKEN, SYNC_INTERVAL_SECONDS, STALE_SESSION_MINUTES,
-    RASPI_TELEMETRY_URL, MEDIAMTX_URL,
+    RASPI_TELEMETRY_URL, MEDIAMTX_URL, MEDIAMTX_API_URL,
 )
 from core.validation import safe_float
 
@@ -81,6 +82,54 @@ def _read_water_quality(data: dict) -> Optional[dict]:
     return values
 
 
+# Status sensor Pixhawk dari JSON Raspberry Pi (Arga, 2026-11-13):
+# "pixhawk_sensors": {"gyro_ok", "accel_ok", "compass_ok", "baro_ok"} dari SYS_STATUS.
+# Dashboard menampilkan OK bila kolom terisi, N/A bila kosong — sensor gagal / tak
+# dilaporkan disimpan None agar tidak tampil OK.
+PIXHAWK_HEALTH_KEYS = {"gyroscope": "gyro_ok", "accelerometer": "accel_ok", "magnetometer": "compass_ok"}
+
+
+def _read_pixhawk_health(data: dict) -> dict:
+    sensors = data.get("pixhawk_sensors")
+    if not isinstance(sensors, dict):
+        sensors = {}
+    return {col: "OK" if sensors.get(key) is True else None for col, key in PIXHAWK_HEALTH_KEYS.items()}
+
+
+async def _camera_publishing() -> bool:
+    """
+    Apakah kamera sedang mem-publish ke MediaMTX?
+    Utama: API MediaMTX (GET /v3/paths/get/<path> → "ready"), tanpa membuka sesi WebRTC.
+    Cadangan bila API tak terjangkau (mediamtx.yml lama / MediaMTX di mesin lain):
+    POST <path>/whep dengan SDP kosong — 404 = tak ada video, 400 = ada. Cara cadangan
+    ini membuat MediaMTX mencatat "failed to unmarshal SDP" tiap 5 detik.
+    """
+    path = urlparse(MEDIAMTX_URL).path.strip("/")
+    try:
+        response = await _http.get(f"{MEDIAMTX_API_URL.rstrip('/')}/v3/paths/get/{path}")
+        if response.status_code == 200:
+            return response.json().get("ready") is True
+        if response.status_code == 404:
+            return False
+    except (httpx.ConnectError, httpx.TimeoutException):
+        pass
+    except Exception as e:
+        logger.warning(f"Health check — MediaMTX API error: {e}")
+
+    try:
+        response = await _http.post(
+            MEDIAMTX_URL.rstrip("/") + "/whep",
+            content=b"v=0",
+            headers={"Content-Type": "application/sdp"},
+        )
+        return response.status_code != 404 and response.status_code < 500
+    except (httpx.ConnectError, httpx.TimeoutException):
+        return False
+    except Exception as e:
+        logger.warning(f"Health check — MediaMTX error: {e}")
+        return False
+
+
 # ==========================
 # Job 1 — Health check tiap 5 detik
 # ==========================
@@ -110,22 +159,8 @@ async def health_check_job():
         logger.warning(f"Health check — Raspi error: {e}")
 
     # ── Cek 2: MediaMTX fallback — apakah kamera sedang mem-publish? ──
-    # HEAD/GET /cam/ tak bisa dipakai: MediaMTX 1.16 membalas HEAD selalu 404 dan GET
-    # selalu 200 (halaman pemutar). POST /cam/whep dengan SDP kosong membalas 404
-    # "no stream is available" bila tak ada video, dan 400 (SDP tak valid) bila ada.
     if not is_online:
-        try:
-            response = await _http.post(
-                MEDIAMTX_URL.rstrip("/") + "/whep",
-                content=b"v=0",
-                headers={"Content-Type": "application/sdp"},
-            )
-            if response.status_code != 404 and response.status_code < 500:
-                is_online = True
-        except (httpx.ConnectError, httpx.TimeoutException):
-            pass
-        except Exception as e:
-            logger.warning(f"Health check — MediaMTX error: {e}")
+        is_online = await _camera_publishing()
 
     _is_rov_online = is_online
 
@@ -176,9 +211,7 @@ def _save_health_data(telemetry_data: dict, has_navigation: bool, water_quality)
                 depth=float(telemetry_data.get("depth", 0.0)),
                 heading=str(compass.get("heading_deg", "0")),
                 speed=float(telemetry_data.get("speed", 0.0)),
-                gyroscope=None,
-                accelerometer=None,
-                magnetometer=None,
+                **_read_pixhawk_health(telemetry_data),
                 rov_id=None,
                 is_synced=False,
                 created_at=now,
