@@ -46,6 +46,7 @@ from routers.sync import router as sync_router
 # ==========================
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)  # cek ROV online tiap 5 dtk tidak dicatat; error tetap
 logger = logging.getLogger("carter-backend")
 
 
