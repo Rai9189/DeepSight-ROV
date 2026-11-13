@@ -24,3 +24,51 @@ def test_pixhawk_health_missing_or_bad_is_empty():
     assert _read_pixhawk_health({}) == empty
     assert _read_pixhawk_health({"pixhawk_sensors": "rusak"}) == empty
     assert _read_pixhawk_health({"pixhawk_sensors": {"gyro_ok": "true"}}) == empty
+
+
+# Format final Arga (2026-11-13): Pixhawk putus / nilai error dikirim null.
+# Navigasi tak valid dilewati, tapi kualitas air tetap tersimpan.
+from datetime import datetime  # noqa: E402
+from core.scheduler import _read_navigation, _save_health_data  # noqa: E402
+from database.models import MonitoringSession, SessionStatus, AUVStatus, Telemetry  # noqa: E402
+
+FINAL = {"ph": 7.42, "tds_ppm": 114.5, "do_mg_l": 6.85, "temperature_c": 29.0, "depth": 0.0, "speed": None,
+         "attitude": {"roll_deg": 1.2, "pitch_deg": -0.8, "yaw_deg": 132.0}, "compass": {"heading_deg": 132.0},
+         "pixhawk_sensors": {"gyro_ok": True, "accel_ok": True, "compass_ok": False, "baro_ok": True},
+         "sensor_status": {"tds_ok": True, "ph_ok": True, "do_ok": True, "pixhawk_ok": True},
+         "timestamp": "2026-11-13T20:00:00Z"}
+
+
+def _save(db, admin, data):
+    t = datetime.utcnow()
+    s = MonitoringSession(user_id=admin.id, location_name="Raspi", status=SessionStatus.RUNNING,
+                          start_time=t, created_at=t, updated_at=t)
+    db.add(s)
+    db.commit()
+    _save_health_data(data, _read_navigation(data), _read_water_quality(data))
+    db.expire_all()
+    rows = (db.query(AUVStatus).filter_by(session_id=s.id).all(),
+            db.query(Telemetry).filter_by(session_id=s.id).all())
+    s.status = SessionStatus.COMPLETED
+    db.commit()
+    return rows
+
+
+def test_final_json_saves_navigation_and_water(db, admin):
+    nav, water = _save(db, admin, FINAL)
+    assert len(nav) == 1 and len(water) == 1
+    assert (nav[0].roll, nav[0].heading, nav[0].speed) == (1.2, "132.0", 0.0)
+    assert (nav[0].gyroscope, nav[0].accelerometer, nav[0].magnetometer) == ("OK", "OK", None)
+    assert water[0].tds_value == 114.5
+
+
+def test_pixhawk_null_still_saves_water(db, admin):
+    nav, water = _save(db, admin, dict(FINAL, attitude=None, compass=None, pixhawk_sensors=None))
+    assert len(nav) == 0 and len(water) == 1
+
+
+def test_bad_attitude_value_still_saves_water(db, admin):
+    for bad in (None, "nan", float("inf"), "rusak"):
+        att = {"roll_deg": bad, "pitch_deg": 0.0, "yaw_deg": 0.0}
+        nav, water = _save(db, admin, dict(FINAL, attitude=att))
+        assert len(nav) == 0 and len(water) == 1, bad

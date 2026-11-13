@@ -96,6 +96,26 @@ def _read_pixhawk_health(data: dict) -> dict:
     return {col: "OK" if sensors.get(key) is True else None for col, key in PIXHAWK_HEALTH_KEYS.items()}
 
 
+def _read_navigation(data: dict) -> Optional[dict]:
+    """
+    Attitude/compass dari JSON Raspberry Pi. Return None bila Pixhawk putus
+    (Arga mengirim null) atau ada nilai bukan angka — baris auv_status dilewati,
+    tapi kualitas air tetap disimpan (keduanya satu transaksi).
+    """
+    attitude, compass = data.get("attitude"), data.get("compass")
+    if not (isinstance(attitude, dict) and isinstance(compass, dict)):
+        return None
+    try:  # safe_float juga menolak NaN/Infinity yang ditolak MySQL
+        return {
+            "roll": safe_float(attitude.get("roll_deg"), "roll"),
+            "pitch": safe_float(attitude.get("pitch_deg"), "pitch"),
+            "yaw": safe_float(attitude.get("yaw_deg"), "yaw"),
+            "heading": str(safe_float(compass.get("heading_deg"), "heading")),
+        }
+    except ValueError:
+        return None
+
+
 async def _camera_publishing() -> bool:
     """
     Apakah kamera sedang mem-publish ke MediaMTX?
@@ -167,16 +187,16 @@ async def health_check_job():
     if telemetry_data is None:
         return
 
-    has_navigation = all(k in telemetry_data for k in ("attitude", "compass"))
+    navigation = _read_navigation(telemetry_data)
     water_quality = _read_water_quality(telemetry_data)
-    if not has_navigation and water_quality is None:
+    if navigation is None and water_quality is None:
         return
 
     # Simpan di thread agar query DB tidak memblokir event loop (video, API)
-    await asyncio.to_thread(_save_health_data, telemetry_data, has_navigation, water_quality)
+    await asyncio.to_thread(_save_health_data, telemetry_data, navigation, water_quality)
 
 
-def _save_health_data(telemetry_data: dict, has_navigation: bool, water_quality) -> None:
+def _save_health_data(telemetry_data: dict, navigation: Optional[dict], water_quality) -> None:
     """Simpan AUVStatus/Telemetry health check ke sesi RUNNING (sinkron, jalan di thread)."""
     from database.connection import SessionLocal
     from database.models import AUVStatus, Telemetry
@@ -185,8 +205,6 @@ def _save_health_data(telemetry_data: dict, has_navigation: bool, water_quality)
     db = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
-        attitude = telemetry_data.get("attitude", {})
-        compass  = telemetry_data.get("compass", {})
 
         from database.models import MonitoringSession, SessionStatus
         active_session = (
@@ -200,17 +218,20 @@ def _save_health_data(telemetry_data: dict, has_navigation: bool, water_quality)
             logger.debug("Health check — tidak ada sesi aktif, skip simpan AUVStatus/Telemetry")
             return
 
-        if has_navigation:
+        def _num(key):  # depth/speed boleh null (belum ada barometer) → 0.0
+            try:
+                return safe_float(telemetry_data.get(key), key, default=0.0)
+            except ValueError:
+                return 0.0
+
+        if navigation is not None:
             auv_status = AUVStatus(
                 id=generate_cuid(),
                 session_id=active_session.id,
                 timestamp=now,
-                roll=float(attitude.get("roll_deg", 0.0)),
-                pitch=float(attitude.get("pitch_deg", 0.0)),
-                yaw=float(attitude.get("yaw_deg", 0.0)),
-                depth=float(telemetry_data.get("depth", 0.0)),
-                heading=str(compass.get("heading_deg", "0")),
-                speed=float(telemetry_data.get("speed", 0.0)),
+                **navigation,
+                depth=_num("depth"),
+                speed=_num("speed"),
                 **_read_pixhawk_health(telemetry_data),
                 rov_id=None,
                 is_synced=False,
@@ -219,15 +240,11 @@ def _save_health_data(telemetry_data: dict, has_navigation: bool, water_quality)
             db.add(auv_status)
 
         if water_quality is not None:
-            try:
-                depth = safe_float(telemetry_data.get("depth"), "depth", default=0.0)
-            except ValueError:
-                depth = 0.0
             db.add(Telemetry(
                 id=generate_cuid(),
                 session_id=active_session.id,
                 timestamp=now,
-                depth=depth,
+                depth=_num("depth"),
                 is_synced=False,
                 created_at=now,
                 **water_quality,
