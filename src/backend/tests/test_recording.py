@@ -36,16 +36,17 @@ def _probe(path):
 def test_duration_matches_wall_clock_and_is_seekable(tmp_path):
     path = str(tmp_path / "rec.mp4")
     track = RtspDetectionTrack(None)
-    track.start_recording(path)
+    rec = track.start_recording(path)
     _feed(track, 4.0)
-    assert track.stop_recording() is True
-    assert track.recording is False
+    assert rec.stop_recording() is True
+    _feed(track, 0.1)  # frame berikutnya: recorder yang sudah berhenti dilepas dari track
+    assert not track.recorders
 
     _, n, dur = _probe(path)
     assert n > 20
     assert abs(dur - 4.0) < 0.5, dur  # dulu: 210 frame / 10 fps → durasi salah
     # Durasi yang disimpan ke Recordings = panjang file (dulu jam dinding, ~4 dtk lebih panjang)
-    assert abs(track.recorded_seconds - dur) < 0.1, (track.recorded_seconds, dur)
+    assert abs(rec.recorded_seconds - dur) < 0.1, (rec.recorded_seconds, dur)
 
     # keyframe kedua (frame ke-30) jatuh ~detik 3 → seek ke 3.6 harus mendarat
     # di keyframe itu, bukan kembali ke awal file
@@ -60,19 +61,36 @@ def test_file_readable_without_stop(tmp_path):
     """Simulasi crash: salin file saat rekaman masih jalan, salinan harus bisa diputar."""
     path = str(tmp_path / "rec.mp4")
     track = RtspDetectionTrack(None)
-    track.start_recording(path)
+    rec = track.start_recording(path)
     _feed(track, 4.5, fps_pattern=(15,))  # keyframe di detik 0, 2, 4 → ≥ 2 fragmen selesai
     time.sleep(0.3)
     crashed = str(tmp_path / "crashed.mp4")
     shutil.copy(path, crashed)
-    track.stop_recording()
+    rec.stop_recording()
 
     _, n, dur = _probe(crashed)
     assert n >= 30 and dur >= 1.5, (n, dur)
 
 
-def test_stop_without_start_is_noop():
-    assert RtspDetectionTrack(None).stop_recording() is True
+def test_stop_twice_is_noop(tmp_path):
+    rec = RtspDetectionTrack(None).start_recording(str(tmp_path / "rec.mp4"))
+    assert rec.stop_recording() is True
+    assert rec.stop_recording() is True
+
+
+def test_two_tabs_record_the_same_track_to_separate_files(tmp_path):
+    """Track dipakai bersama: dua tab merekam bersamaan, berhenti di waktu berbeda."""
+    track = RtspDetectionTrack(None)
+    a = track.start_recording(str(tmp_path / "a.mp4"))
+    _feed(track, 2.0, fps_pattern=(15,))
+    b = track.start_recording(str(tmp_path / "b.mp4"))
+    _feed(track, 2.0, fps_pattern=(15,))
+    assert a.stop_recording() is True
+    _feed(track, 2.0, fps_pattern=(15,))
+    assert b.stop_recording() is True
+    assert abs(a.recorded_seconds - 4.0) < 0.5, a.recorded_seconds
+    assert abs(b.recorded_seconds - 4.0) < 0.5, b.recorded_seconds
+    assert _probe(str(tmp_path / "a.mp4"))[1] > 30 and _probe(str(tmp_path / "b.mp4"))[1] > 30
 
 
 def test_recording_without_frames_is_not_saved(tmp_path, monkeypatch):
@@ -84,10 +102,9 @@ def test_recording_without_frames_is_not_saved(tmp_path, monkeypatch):
     monkeypatch.setattr(rec, "save_recording_to_db", must_not_save)
 
     path = str(tmp_path / "empty.mp4")
-    track = RtspDetectionTrack(None)
-    track.start_recording(path)
+    recorder = RtspDetectionTrack(None).start_recording(path)
     rec.active_recordings["c1"] = {
-        "recording_id": "r1", "filename": "empty.mp4", "filepath": path, "track": track,
+        "recording_id": "r1", "filename": "empty.mp4", "filepath": path, "recorder": recorder,
         "start_time": rec.datetime.now(rec.JAKARTA_TZ), "session_id": "s1",
     }
     result = asyncio.run(rec.stop_recording("c1"))

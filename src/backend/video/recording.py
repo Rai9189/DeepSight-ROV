@@ -54,13 +54,14 @@ async def start_recording(client_id: str, detection_track) -> Optional[str]:
         filename = f"recording_{recording_id}.mp4"
         filepath = os.path.join(RECORDINGS_DIR, filename)
 
-        detection_track.start_recording(filepath)
+        # Track bisa dipakai bersama beberapa tab; tiap tab punya Recorder (file) sendiri
+        recorder = detection_track.start_recording(filepath)
 
         active_recordings[client_id] = {
             "recording_id": recording_id,
             "filename": filename,
             "filepath": filepath,
-            "track": detection_track,
+            "recorder": recorder,
             "start_time": datetime.now(JAKARTA_TZ),
             "session_id": actual_session_id
         }
@@ -84,11 +85,11 @@ async def stop_recording(client_id: str) -> Optional[dict]:
         end_time = datetime.now(JAKARTA_TZ)
 
         # Tunggu thread penulis menutup file (di thread lain agar event loop tidak terblokir)
-        await asyncio.to_thread(recording_info["track"].stop_recording)
+        await asyncio.to_thread(recording_info["recorder"].stop_recording)
 
         file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
         # Panjang video sebenarnya; jam dinding hanya cadangan bila penulis belum selesai (timeout)
-        duration = getattr(recording_info["track"], "recorded_seconds", None)
+        duration = recording_info["recorder"].recorded_seconds
         if duration is None:
             duration = (end_time - recording_info["start_time"]).total_seconds()
 
@@ -108,7 +109,7 @@ async def stop_recording(client_id: str) -> Optional[dict]:
             f"{recording_info['filename']} ({duration:.1f}s, {file_size/1024/1024:.2f}MB)"
         )
 
-        if recording_info["track"].recorded_frames == 0:
+        if recording_info["recorder"].recorded_frames == 0:
             # Kamera/RTSP tidak pernah mengirim frame: jangan buat entri Recordings kosong
             try:
                 os.remove(filepath)
@@ -153,7 +154,7 @@ def cleanup_all_recordings():
     for client_id in list(active_recordings.keys()):
         recording_info = active_recordings.pop(client_id)
         try:
-            recording_info["track"].stop_recording()
+            recording_info["recorder"].stop_recording()
             logger.info(f"Cleaned up recording for client {client_id}")
         except Exception as e:
             logger.error(f"Error cleaning up recording for {client_id}: {e}")

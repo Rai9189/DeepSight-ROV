@@ -1,8 +1,8 @@
 import asyncio
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Set, Tuple
 from aiortc import RTCPeerConnection, RTCRtpSender, RTCSessionDescription
-from aiortc.contrib.media import MediaPlayer
+from aiortc.contrib.media import MediaPlayer, MediaRelay
 
 from config import (
     RTSP_TRANSPORT,
@@ -19,9 +19,31 @@ logger = logging.getLogger("carter-backend")
 
 # Global state
 peer_connections: Dict[str, RTCPeerConnection] = {}
-detection_tracks: Dict[str, RtspDetectionTrack] = {}
+detection_tracks: Dict[str, RtspDetectionTrack] = {}  # tab → track bersama (_Hub.track)
 bitrate_tasks: Dict[str, asyncio.Task] = {}
-media_players: Dict[str, MediaPlayer] = {}
+
+
+class _Hub:
+    """
+    Satu jalur kamera untuk SEMUA tab: RTSP dibuka, di-decode, dan dideteksi YOLO
+    sekali per frame, lalu MediaRelay membagikan hasilnya; tiap tab hanya
+    meng-encode WebRTC sendiri. Dulu tiap tab punya jalur sendiri → YOLO antre
+    (_infer_lock) dan 2 tab turun dari ±9 ke <1 deteksi/dtk (diukur 2026-11-13).
+    """
+
+    def __init__(self, player: MediaPlayer):
+        self.player = player
+        self.track = RtspDetectionTrack(player.video)
+        self.clients: Set[str] = set()
+
+    def alive(self) -> bool:
+        return self.player.video is not None and self.player.video.readyState == "live"
+
+
+_relay = MediaRelay()
+_hub: Optional[_Hub] = None
+_client_hub: Dict[str, _Hub] = {}
+_hub_lock: Optional[asyncio.Lock] = None  # dibuat di event loop yang berjalan (Python 3.8 mengikat loop saat dibuat)
 
 
 def prefer_codec(transceiver, codec: str) -> None:
@@ -42,6 +64,72 @@ def _stop_player(player: MediaPlayer) -> None:
     for track in (player.audio, player.video):
         if track:
             track.stop()
+
+
+async def _open_player(transport: str) -> MediaPlayer:
+    # Buka RTSP di thread executor agar tidak memblokir event loop
+    # av.open() di MediaPlayer adalah blocking call — jika dijalankan langsung
+    # di async function, seluruh event loop (termasuk Ctrl+C) akan terhenti
+    loop = asyncio.get_running_loop()
+
+    def open_player():
+        # Python 3.8 (Jetson JetPack 5): aiortc membuat asyncio.Queue saat MediaPlayer
+        # dibuat, dan Queue 3.8 mengikat event loop thread ini — beri loop utama
+        asyncio.set_event_loop(loop)
+        return make_rtsp_player(transport)
+
+    try:
+        player = await asyncio.wait_for(loop.run_in_executor(None, open_player), timeout=6.0)
+    except asyncio.TimeoutError:
+        raise RuntimeError("RTSP timeout: MediaMTX did not respond within 6 seconds. Check that a video source is running.")
+    except Exception as exc:
+        raise RuntimeError(f"RTSP failed: {exc}")
+
+    if not player.video:
+        _stop_player(player)
+        raise RuntimeError("The RTSP stream has no video track")
+    return player
+
+
+async def _join_hub(client_id: str, transport: str) -> _Hub:
+    """Pakai jalur kamera yang sedang jalan; buka baru bila belum ada atau kamera sempat putus."""
+    global _hub, _hub_lock
+    if _hub_lock is None:
+        _hub_lock = asyncio.Lock()
+    async with _hub_lock:  # dua tab yang mulai bersamaan tidak membuka RTSP dua kali
+        if _hub is None or not _hub.alive():
+            if _hub is not None:
+                release_saving(_hub.track)  # jalur lama mati; tab lamanya menutup sendiri saat reconnect
+            # ponytail: transport RTSP (udp/tcp) ikut tab pertama yang membuka jalur
+            _hub = _Hub(await _open_player(transport))
+            logger.info(f"Camera pipeline opened (rtsp={transport})")
+        _hub.clients.add(client_id)
+        _client_hub[client_id] = _hub
+        return _hub
+
+
+async def _leave_hub(client_id: str) -> None:
+    """Lepas tab dari jalur kamera; tab terakhir menutup RTSP."""
+    global _hub
+    hub = _client_hub.pop(client_id, None)
+    if hub is None:
+        return
+    hub.clients.discard(client_id)
+    if hub.clients:
+        return
+    if _hub is hub:
+        _hub = None
+    release_saving(hub.track)
+
+    # Stop MediaPlayer di executor agar tidak blokir event loop
+    try:
+        loop = asyncio.get_running_loop()
+        await asyncio.wait_for(loop.run_in_executor(None, _stop_player, hub.player), timeout=3.0)
+        logger.info(f"Camera pipeline closed (last viewer {client_id} left)")
+    except asyncio.TimeoutError:
+        logger.warning("Camera pipeline stop timeout, forcing continue")
+    except Exception as e:
+        logger.warning(f"Error stopping camera pipeline: {e}")
 
 
 async def handle_offer(websocket, client_id: str, message: dict):
@@ -66,41 +154,15 @@ async def handle_offer(websocket, client_id: str, message: dict):
     pc = RTCPeerConnection()
     peer_connections[client_id] = pc
 
-    # Buka RTSP di thread executor agar tidak memblokir event loop
-    # av.open() di MediaPlayer adalah blocking call — jika dijalankan langsung
-    # di async function, seluruh event loop (termasuk Ctrl+C) akan terhenti
-    loop = asyncio.get_running_loop()
-
-    def open_player():
-        # Python 3.8 (Jetson JetPack 5): aiortc membuat asyncio.Queue saat MediaPlayer
-        # dibuat, dan Queue 3.8 mengikat event loop thread ini — beri loop utama
-        asyncio.set_event_loop(loop)
-        return make_rtsp_player(transport)
-
     try:
-        player = await asyncio.wait_for(
-            loop.run_in_executor(None, open_player),
-            timeout=6.0
-        )
-    except asyncio.TimeoutError:
+        hub = await _join_hub(client_id, transport)
+    except Exception:
         peer_connections.pop(client_id, None)
-        raise RuntimeError("RTSP timeout: MediaMTX did not respond within 6 seconds. Check that a video source is running.")
-    except Exception as exc:
-        peer_connections.pop(client_id, None)
-        raise RuntimeError(f"RTSP failed: {exc}")
+        raise
+    detection_tracks[client_id] = hub.track
 
-    if not player.video:
-        peer_connections.pop(client_id, None)
-        _stop_player(player)
-        raise RuntimeError("The RTSP stream has no video track")
-
-    media_players[client_id] = player
-
-    # Create detection track
-    det_track = RtspDetectionTrack(player.video)
-    detection_tracks[client_id] = det_track
-
-    sender = pc.addTrack(det_track)
+    # buffered=False: tab yang lambat hanya menerima frame terbaru, tidak menumpuk latensi
+    sender = pc.addTrack(_relay.subscribe(hub.track, buffered=False))
     prefer_codec(next(t for t in pc.getTransceivers() if t.sender is sender), pref_codec)
 
     @pc.on("connectionstatechange")
@@ -148,7 +210,7 @@ async def cleanup_pc(client_id: str):
     if task:
         task.cancel()
 
-    release_saving(detection_tracks.pop(client_id, None))
+    detection_tracks.pop(client_id, None)
 
     # Tutup file rekaman + simpan ke video_paths agar tidak jadi orphan
     # saat client disconnect tanpa sempat memanggil /api/recording/stop
@@ -171,20 +233,7 @@ async def cleanup_pc(client_id: str):
             pass
         logger.info(f"PC {client_id} closed")
 
-    # Stop MediaPlayer di executor agar tidak blokir event loop
-    player = media_players.pop(client_id, None)
-    if player:
-        try:
-            loop = asyncio.get_running_loop()
-            await asyncio.wait_for(
-                loop.run_in_executor(None, _stop_player, player),
-                timeout=3.0
-            )
-            logger.info(f"MediaPlayer {client_id} stopped")
-        except asyncio.TimeoutError:
-            logger.warning(f"MediaPlayer {client_id} stop timeout, forcing continue")
-        except Exception as e:
-            logger.warning(f"Error stopping MediaPlayer {client_id}: {e}")
+    await _leave_hub(client_id)
 
 
 def get_peer_connections() -> Dict[str, RTCPeerConnection]:

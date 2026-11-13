@@ -126,6 +126,49 @@ def write_recording(filepath: str, frames: "queue.Queue") -> float:
     return seconds  # panjang video di file, bukan jam dinding mulai–selesai
 
 
+class Recorder:
+    """
+    Satu rekaman (satu tab). Track bersama bisa punya beberapa Recorder sekaligus:
+    tiap tab yang menekan Start merekam ke file sendiri dari frame yang sama.
+    """
+
+    def __init__(self, filepath: str):
+        self.frames: "queue.Queue" = queue.Queue(maxsize=RECORD_QUEUE_SIZE)
+        self.recorded_frames = 0
+        self.recorded_seconds: Optional[float] = None  # diisi thread penulis saat file ditutup
+        self.stopped = False
+        self.thread = threading.Thread(target=self._write, args=(filepath,), daemon=True)
+        self.thread.start()
+
+    def _write(self, filepath: str):
+        self.recorded_seconds = write_recording(filepath, self.frames)
+
+    def push(self, img: np.ndarray):
+        try:
+            self.frames.put_nowait((time.monotonic(), img.copy()))
+            self.recorded_frames += 1
+        except queue.Full:
+            pass  # encoder tertinggal: frame dibuang, durasi tetap benar (pts jam dinding)
+
+    def stop_recording(self, timeout: float = 10.0) -> bool:
+        """
+        Blocking (panggil lewat asyncio.to_thread). Kirim tanda selesai ke
+        thread penulis lalu tunggu file ditutup. True bila file sudah final.
+        """
+        if not self.stopped:
+            self.stopped = True
+            try:
+                self.frames.put(None, timeout=timeout)  # penulis sedang menguras antrean, slot pasti terbuka
+            except queue.Full:
+                pass
+        self.thread.join(timeout)
+        if self.thread.is_alive():
+            # File tetap ditutup oleh thread penulis sendiri begitu selesai
+            logger.warning("Video writer belum selesai saat timeout; file difinalisasi di background")
+            return False
+        return True
+
+
 class RtspDetectionTrack(VideoStreamTrack):
 
     def __init__(self, video_source_track):
@@ -158,11 +201,8 @@ class RtspDetectionTrack(VideoStreamTrack):
         self.last_save_time = time.time()
         self.save_task: Optional[asyncio.Task] = None
 
-        # Recording: frame dikirim ke thread penulis (write_recording) lewat antrean
-        self.recording = False
-        self.recorded_frames = 0
-        self.frame_queue: Optional[queue.Queue] = None
-        self.writer_thread: Optional[threading.Thread] = None
+        # Rekaman yang sedang berjalan (satu per tab yang merekam)
+        self.recorders: set = set()
 
     def drop_stale_frames(self):
         """
@@ -265,45 +305,14 @@ class RtspDetectionTrack(VideoStreamTrack):
         return out
 
     def enqueue_recording_frame(self, img: np.ndarray):
-        q = self.frame_queue
-        if self.recording and q is not None:
-            try:
-                q.put_nowait((time.monotonic(), img.copy()))
-                self.recorded_frames += 1
-            except queue.Full:
-                pass  # encoder tertinggal: frame dibuang, durasi tetap benar (pts jam dinding)
+        for r in list(self.recorders):
+            if r.stopped:
+                self.recorders.discard(r)
+            else:
+                r.push(img)
 
-    def start_recording(self, filepath: str):
-        self.frame_queue = queue.Queue(maxsize=RECORD_QUEUE_SIZE)
-        self.recorded_frames = 0
-        self.recorded_seconds: Optional[float] = None  # diisi thread penulis saat file ditutup
-        q = self.frame_queue
-
-        def _write():
-            self.recorded_seconds = write_recording(filepath, q)
-
-        self.writer_thread = threading.Thread(target=_write, daemon=True)
-        self.writer_thread.start()
-        self.recording = True
+    def start_recording(self, filepath: str) -> Recorder:
+        recorder = Recorder(filepath)
+        self.recorders.add(recorder)
         logger.info(f"Started recording to {filepath}")
-
-    def stop_recording(self, timeout: float = 10.0) -> bool:
-        """
-        Blocking (panggil lewat asyncio.to_thread). Kirim tanda selesai ke
-        thread penulis lalu tunggu file ditutup. True bila file sudah final.
-        """
-        self.recording = False
-        q, thread = self.frame_queue, self.writer_thread
-        self.frame_queue = self.writer_thread = None
-        if q is None or thread is None:
-            return True
-        try:
-            q.put(None, timeout=timeout)  # penulis sedang menguras antrean, slot pasti terbuka
-        except queue.Full:
-            pass
-        thread.join(timeout)
-        if thread.is_alive():
-            # File tetap ditutup oleh thread penulis sendiri begitu selesai
-            logger.warning("Video writer belum selesai saat timeout; file difinalisasi di background")
-            return False
-        return True
+        return recorder
