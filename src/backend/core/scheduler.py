@@ -64,9 +64,9 @@ WATER_QUALITY_KEYS = {
 def _read_water_quality(data: dict) -> Optional[dict]:
     """
     Ambil pH/TDS/DO/suhu air dari JSON Raspberry Pi.
-    Return None kalau ada yang hilang / bukan angka — baris telemetri hanya
-    disimpan kalau keempatnya lengkap, supaya sensor mati tidak tercatat 0
-    dan merusak rata-rata (keputusan 2026-09-25).
+    Sensor yang hilang / bukan angka disimpan None (NULL di DB), bukan 0, supaya
+    tidak merusak rata-rata dan sensor lain tetap tercatat (mis. TDS belum
+    terpasang, 2026-11-14). Return None bila keempatnya kosong.
     """
     sources = [data]
     if isinstance(data.get("water_quality"), dict):
@@ -78,8 +78,8 @@ def _read_water_quality(data: dict) -> Optional[dict]:
         try:
             values[field] = safe_float(raw, field)
         except ValueError:
-            return None
-    return values
+            values[field] = None
+    return values if any(v is not None for v in values.values()) else None
 
 
 # Status sensor Pixhawk dari JSON Raspberry Pi (Arga, 2026-11-13):
@@ -98,22 +98,27 @@ def _read_pixhawk_health(data: dict) -> dict:
 
 def _read_navigation(data: dict) -> Optional[dict]:
     """
-    Attitude/compass dari JSON Raspberry Pi. Return None bila Pixhawk putus
+    Attitude/compass dari JSON Raspberry Pi. Return None bila attitude putus
     (Arga mengirim null) atau ada nilai bukan angka — baris auv_status dilewati,
     tapi kualitas air tetap disimpan (keduanya satu transaksi).
+    Heading kosong / tak valid (kompas tak mengirim data) → None, tampil "—".
     """
     attitude, compass = data.get("attitude"), data.get("compass")
-    if not (isinstance(attitude, dict) and isinstance(compass, dict)):
+    if not isinstance(attitude, dict):
         return None
     try:  # safe_float juga menolak NaN/Infinity yang ditolak MySQL
-        return {
+        nav = {
             "roll": safe_float(attitude.get("roll_deg"), "roll"),
             "pitch": safe_float(attitude.get("pitch_deg"), "pitch"),
             "yaw": safe_float(attitude.get("yaw_deg"), "yaw"),
-            "heading": str(safe_float(compass.get("heading_deg"), "heading")),
         }
     except ValueError:
         return None
+    try:
+        nav["heading"] = str(safe_float((compass or {}).get("heading_deg"), "heading"))
+    except (ValueError, AttributeError):
+        nav["heading"] = None
+    return nav
 
 
 async def _camera_publishing() -> bool:
@@ -157,7 +162,7 @@ async def health_check_job():
     """
     Cek koneksi ROV via Raspberry Pi telemetri endpoint.
     Jika data navigasi tersedia (attitude/compass), simpan ke auv_status.
-    Jika pH/TDS/DO/suhu air lengkap, simpan ke telemetries.
+    Jika minimal satu dari pH/TDS/DO/suhu air terbaca, simpan ke telemetries.
     """
     global _is_rov_online
 

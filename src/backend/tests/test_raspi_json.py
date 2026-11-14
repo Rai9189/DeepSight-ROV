@@ -10,8 +10,16 @@ def test_reads_sensor_team_format():
     }
 
 
-def test_missing_value_saves_nothing():
-    assert _read_water_quality({"ph": 7.42, "tds_ppm": 320.5, "do_mg_l": 6.85}) is None
+def test_missing_or_bad_value_is_none_not_zero():
+    # TDS belum terpasang (2026-11-14): sensor lain tetap tersimpan, TDS None (bukan 0)
+    assert _read_water_quality({"ph": 7.42, "tds_ppm": None, "do_mg_l": 6.85, "temperature_c": "rusak"}) == {
+        "ph_level": 7.42, "tds_value": None, "dissolved_oxygen": 6.85, "water_temp": None,
+    }
+
+
+def test_all_water_sensors_dead_saves_nothing():
+    assert _read_water_quality({"ph": None, "tds_ppm": None}) is None
+    assert _read_water_quality({}) is None
 
 
 def test_pixhawk_health_ok_only_when_true():
@@ -72,3 +80,16 @@ def test_bad_attitude_value_still_saves_water(db, admin):
         att = {"roll_deg": bad, "pitch_deg": 0.0, "yaw_deg": 0.0}
         nav, water = _save(db, admin, dict(FINAL, attitude=att))
         assert len(nav) == 0 and len(water) == 1, bad
+
+
+def test_missing_tds_stored_as_null_not_zero(db, admin):
+    nav, water = _save(db, admin, dict(FINAL, tds_ppm=None))
+    assert len(water) == 1
+    assert (water[0].ph_level, water[0].tds_value, water[0].water_temp) == (7.42, None, 29.0)
+
+
+def test_missing_heading_keeps_attitude_with_null_heading(db, admin):
+    for compass in (None, {}, {"heading_deg": None}, {"heading_deg": "nan"}):
+        nav, water = _save(db, admin, dict(FINAL, compass=compass))
+        assert len(nav) == 1 and len(water) == 1, compass
+        assert (nav[0].roll, nav[0].heading) == (1.2, None), compass

@@ -155,26 +155,28 @@ def get_telemetry_analytics(
 
     series = _telemetry_series(db, conds, count, first_ts, last_ts)
     _r = lambda v: round(float(v or 0), 2)
+    # Sensor air boleh NULL (sensor mati) → None, tampil "—" bukan 0
+    _rn = lambda v: round(float(v), 2) if v is not None else None
 
     return {
         "success": True,
         "data": {
             "summary": {
-                "avgPh": _r(avg_ph),
-                "avgTds": _r(avg_tds),
-                "avgDo": _r(avg_do),
-                "avgTemp": _r(avg_temp),
-                "minPh": _r(min_ph), "maxPh": _r(max_ph),
-                "minTds": _r(min_tds), "maxTds": _r(max_tds),
-                "minDo": _r(min_do), "maxDo": _r(max_do),
-                "minTemp": _r(min_temp), "maxTemp": _r(max_temp),
+                "avgPh": _rn(avg_ph),
+                "avgTds": _rn(avg_tds),
+                "avgDo": _rn(avg_do),
+                "avgTemp": _rn(avg_temp),
+                "minPh": _rn(min_ph), "maxPh": _rn(max_ph),
+                "minTds": _rn(min_tds), "maxTds": _rn(max_tds),
+                "minDo": _rn(min_do), "maxDo": _rn(max_do),
+                "minTemp": _rn(min_temp), "maxTemp": _rn(max_temp),
                 "dataPoints": count,
                 "latestDepth": _r(latest_depth),
             },
-            "ph": [{"time": s[0], "value": _r(s[1])} for s in series],
-            "tds": [{"time": s[0], "value": _r(s[2])} for s in series],
-            "dissolvedOxygen": [{"time": s[0], "value": _r(s[3])} for s in series],
-            "temperature": [{"time": s[0], "value": _r(s[4])} for s in series],
+            "ph": [{"time": s[0], "value": _rn(s[1])} for s in series],
+            "tds": [{"time": s[0], "value": _rn(s[2])} for s in series],
+            "dissolvedOxygen": [{"time": s[0], "value": _rn(s[3])} for s in series],
+            "temperature": [{"time": s[0], "value": _rn(s[4])} for s in series],
             "depth": [{"time": s[0], "value": _r(s[5])} for s in series],
         },
     }
@@ -253,7 +255,7 @@ def get_auv_status_analytics(
             "summary": {
                 "dataPoints": count,
                 "latestDepth": round(latest.depth, 2) if latest and latest.depth is not None else 0,
-                "latestHeading": latest.heading if latest and latest.heading is not None else "N",
+                "latestHeading": latest.heading if latest else None,
                 "latestSpeed": round(latest.speed, 2) if latest and latest.speed is not None else 0,
             },
             "attitude": [
@@ -270,7 +272,7 @@ def get_auv_status_analytics(
                     "time": iso_utc(s.timestamp),
                     "depth": round(s.depth or 0, 2),
                     "speed": round(s.speed or 0, 2),
-                    "heading": s.heading or "N",
+                    "heading": s.heading,
                 }
                 for s in status_data
             ],
